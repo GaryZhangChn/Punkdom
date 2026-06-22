@@ -1,8 +1,6 @@
 # Punkdom
 
-Punkdom v0.1 是一个本地优先的 AI 创作工作台。当前版本基于 [alfredxw/nova](https://github.com/alfredxw/nova) 的 `8e4528c48875e0fdaacc5548b1b2ad197259fff6` 快照深度改名复刻，用作 Punkdom 后续产品迭代的初始基线。
-
-v0.1 保留 Nova 的现有功能行为：写作模式、互动模式、结构化资料库、创作 Agent、Skills、自动化、版本管理、小说导入、角色卡导入、设置和本地 workspace 管理。
+Punkdom v0.1 是一个本地优先的 AI 创作工作台。
 
 ## Quick Start
 
