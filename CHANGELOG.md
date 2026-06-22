@@ -7,6 +7,8 @@
 - Persisted theme changes through user settings while preserving the existing settings panel theme selector.
 - Fixed Paper theme persistence by allowing `paper` in backend settings validation.
 - Removed the redundant workbench mode title text from the top bar.
+- Aligned the Writing Agent panel header divider with the center editor tab bar.
+- Added a visible vertical divider between the center editor panel and right Agent panel.
 
 ## [v0.1.0] - 2026-06-22
 

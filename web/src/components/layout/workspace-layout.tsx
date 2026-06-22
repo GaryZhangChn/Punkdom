@@ -86,7 +86,7 @@ export function WorkspaceLayout({
             {rightPanel && (
               <>
                 {rightPanelVisible ? <WorkspaceResizeHandle direction="vertical" label={t('layout.resize.right')} /> : null}
-                <Panel id="right" defaultSize="34%" minSize="360px" maxSize="55%" className="min-w-[360px]" disabled={!rightPanelVisible} hidden={!rightPanelVisible} aria-hidden={!rightPanelVisible}>
+                <Panel id="right" defaultSize="34%" minSize="360px" maxSize="55%" className="min-w-[360px] border-l border-[var(--punkdom-border)]" disabled={!rightPanelVisible} hidden={!rightPanelVisible} aria-hidden={!rightPanelVisible}>
                   <motion.div
                     className="h-full min-h-0"
                     variants={subtlePresence}

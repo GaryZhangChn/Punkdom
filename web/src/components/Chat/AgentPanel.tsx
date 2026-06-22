@@ -139,7 +139,7 @@ export function AgentPanel({
 
   return (
     <aside className="punkdom-sidebar flex h-full min-h-0 flex-col">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-[var(--punkdom-border)] px-3">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--punkdom-border)] px-3">
         <div className="flex min-w-0 shrink-0 items-center gap-2 text-xs font-medium text-[var(--punkdom-text)]">
           <Bot className="h-3.5 w-3.5 text-[var(--punkdom-text-muted)]" />
           {t('chat.agent')}
