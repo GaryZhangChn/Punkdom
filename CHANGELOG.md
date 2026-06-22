@@ -9,6 +9,7 @@
 - Removed the redundant workbench mode title text from the top bar.
 - Aligned the Writing Agent panel header divider with the center editor tab bar.
 - Added a visible vertical divider between the center editor panel and right Agent panel.
+- Fixed update checks by pointing the default release repository to `WiltonH/Punkdom` and falling back to the GitHub Release redirect page when the GitHub REST API is rate-limited.
 
 ## [v0.1.0] - 2026-06-22
 

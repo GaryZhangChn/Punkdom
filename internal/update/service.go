@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,12 +25,15 @@ import (
 )
 
 const githubAPI = "https://api.github.com/repos/"
+const githubWeb = "https://github.com/"
 
 type Service struct {
 	repository     string
 	currentVersion string
 	httpClient     *http.Client
 	executablePath string
+	apiBaseURL     string
+	webBaseURL     string
 }
 
 func NewService() *Service {
@@ -39,6 +43,8 @@ func NewService() *Service {
 		currentVersion: buildinfo.Version,
 		httpClient:     &http.Client{Timeout: 60 * time.Second},
 		executablePath: exe,
+		apiBaseURL:     githubAPI,
+		webBaseURL:     githubWeb,
 	}
 }
 
@@ -73,6 +79,8 @@ func (s *Service) Check(ctx context.Context) (CheckResult, error) {
 		result.Message = "GitHub Release 未提供版本号"
 	case !updateAvailable:
 		result.Message = "当前已是最新版本"
+	case asset == nil && release.WebFallback:
+		result.Message = "找到新版本，但 GitHub API 暂不可用，暂不能应用内安装；请打开 Release 页面下载"
 	case asset == nil:
 		result.Message = fmt.Sprintf("找到新版本，但没有匹配当前平台的安装包: %s", platform)
 	default:
@@ -126,7 +134,20 @@ func (s *Service) Install(ctx context.Context) (InstallResult, error) {
 }
 
 func (s *Service) latestRelease(ctx context.Context) (githubRelease, error) {
-	url := githubAPI + s.repository + "/releases/latest"
+	release, err := s.latestReleaseFromAPI(ctx)
+	if err == nil {
+		return release, nil
+	}
+	fallback, fallbackErr := s.latestReleaseFromWeb(ctx)
+	if fallbackErr != nil {
+		return githubRelease{}, err
+	}
+	log.Printf("[update] GitHub API 检查失败，已使用 Release 页面兜底 repository=%s err=%v", s.repository, err)
+	return fallback, nil
+}
+
+func (s *Service) latestReleaseFromAPI(ctx context.Context) (githubRelease, error) {
+	url := strings.TrimRight(s.apiBaseURL, "/") + "/" + s.repository + "/releases/latest"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return githubRelease{}, err
@@ -147,6 +168,63 @@ func (s *Service) latestRelease(ctx context.Context) (githubRelease, error) {
 		return githubRelease{}, fmt.Errorf("解析 GitHub Release 响应失败: %w", err)
 	}
 	return release, nil
+}
+
+func (s *Service) latestReleaseFromWeb(ctx context.Context) (githubRelease, error) {
+	url := strings.TrimRight(s.webBaseURL, "/") + "/" + s.repository + "/releases/latest"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return githubRelease{}, err
+	}
+	req.Header.Set("User-Agent", "punkdom-update-checker")
+	client := *s.httpClient
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return githubRelease{}, fmt.Errorf("检查 GitHub Release 页面失败: %w", err)
+	}
+	defer resp.Body.Close()
+	location := resp.Header.Get("Location")
+	if location == "" && resp.Request != nil && resp.Request.URL != nil {
+		location = resp.Request.URL.String()
+	}
+	tag, err := releaseTagFromURL(s.repository, location)
+	if err != nil {
+		return githubRelease{}, err
+	}
+	return githubRelease{
+		TagName:     tag,
+		HTMLURL:     strings.TrimRight(s.webBaseURL, "/") + "/" + s.repository + "/releases/tag/" + tag,
+		WebFallback: true,
+	}, nil
+}
+
+func releaseTagFromURL(repository, rawURL string) (string, error) {
+	if strings.TrimSpace(rawURL) == "" {
+		return "", fmt.Errorf("GitHub Release 页面未返回 latest 重定向")
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("解析 GitHub Release 重定向失败: %w", err)
+	}
+	path := strings.TrimPrefix(u.EscapedPath(), "/")
+	if path == "" {
+		path = strings.TrimPrefix(rawURL, "/")
+	}
+	prefix := strings.Trim(repository, "/") + "/releases/tag/"
+	if !strings.HasPrefix(path, prefix) {
+		return "", fmt.Errorf("GitHub Release 重定向目标不是版本标签: %s", rawURL)
+	}
+	tag, err := url.PathUnescape(strings.TrimPrefix(path, prefix))
+	if err != nil {
+		return "", fmt.Errorf("解析 GitHub Release 标签失败: %w", err)
+	}
+	if strings.TrimSpace(tag) == "" {
+		return "", fmt.Errorf("GitHub Release 重定向缺少版本标签")
+	}
+	return tag, nil
 }
 
 func (s *Service) downloadAsset(ctx context.Context, url, target string) error {
@@ -288,6 +366,7 @@ type githubRelease struct {
 	Body        string        `json:"body"`
 	PublishedAt time.Time     `json:"published_at"`
 	Assets      []githubAsset `json:"assets"`
+	WebFallback bool          `json:"-"`
 }
 
 type githubAsset struct {

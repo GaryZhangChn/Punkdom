@@ -11,6 +11,7 @@ v0.1 includes Writing Mode, Interactive Mode, structured lore, creative Agents, 
 - Theme changes are saved to user settings and persist after refresh; Paper Mode is now accepted by backend settings validation.
 - Removed the redundant top-bar workbench mode title for a cleaner shell.
 - Aligned the center editor and Writing Agent panel header dividers, and added a visible vertical divider between the center and right panels.
+- Fixed update checks by using the `WiltonH/Punkdom` Release source and falling back to the GitHub Release page when the GitHub REST API is rate-limited.
 
 ## Quick Start
 

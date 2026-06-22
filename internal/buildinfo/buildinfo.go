@@ -4,4 +4,4 @@ package buildinfo
 // treating themselves as installable release binaries.
 var Version = "dev"
 
-const Repository = "punkdom/punkdom"
+const Repository = "WiltonH/Punkdom"
