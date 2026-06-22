@@ -1,0 +1,403 @@
+package session
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/cloudwego/eino/schema"
+)
+
+func TestClearMarkerKeepsHistoryAndLimitsEffectiveContext(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetOrCreate("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Append(schema.UserMessage("清理前用户")); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Append(schema.AssistantMessage("清理前助手", nil)); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Clear(); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Append(schema.UserMessage("清理后用户")); err != nil {
+		t.Fatal(err)
+	}
+
+	all := sess.GetMessages()
+	if len(all) != 3 {
+		t.Fatalf("clear 不应删除历史消息，实际消息数: %d", len(all))
+	}
+	effective := sess.GetEffectiveMessages()
+	if len(effective) != 1 || effective[0].Content != "清理后用户" {
+		t.Fatalf("有效上下文应只包含 clear 后消息: %#v", effective)
+	}
+	history := sess.History()
+	if len(history) != 4 || history[2].Type != "clear" {
+		t.Fatalf("历史中应保留 clear 分界: %#v", history)
+	}
+}
+
+func TestLoadLegacyJSONLWithoutClearMarkerUsesFullHistory(t *testing.T) {
+	dir := t.TempDir()
+	legacy := strings.Join([]string{
+		`{"type":"session","id":"legacy","created_at":"2026-01-01T00:00:00Z"}`,
+		`{"role":"user","content":"旧问题"}`,
+		`{"role":"assistant","content":"旧回答"}`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "legacy.jsonl"), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.Get("legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	effective := sess.GetEffectiveMessages()
+	if len(effective) != 2 {
+		t.Fatalf("旧文件无 clear 标记时应全部作为有效上下文: %d", len(effective))
+	}
+	if got := sess.Title(); got != "旧问题" {
+		t.Fatalf("旧文件应从首条用户消息推导标题: %s", got)
+	}
+}
+
+func TestDisplayEventsPersistOutsideEffectiveContext(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetOrCreate("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Append(schema.UserMessage("帮我规划下一章")); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.AppendDisplayEvent(DisplayEvent{Role: "thinking", Content: "先分析角色动机"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.AppendDisplayEvent(DisplayEvent{ID: "call-1", Role: "tool_call", Name: "read_file", Content: "read_file", Status: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.AppendDisplayToolArgs("call-1", "read_file", `{"path":"chapters/1.md"}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.UpdateDisplayToolResult("call-1", "read_file", "success", "章节内容"); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Append(schema.AssistantMessage("规划完成", nil)); err != nil {
+		t.Fatal(err)
+	}
+
+	reloadedStore, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := reloadedStore.Get("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	effective := reloaded.GetEffectiveMessages()
+	if len(effective) != 2 {
+		t.Fatalf("展示事件不应进入 Agent 有效上下文: %#v", effective)
+	}
+	history := reloaded.History()
+	if len(history) != 4 {
+		t.Fatalf("历史应包含 user/thinking/tool/assistant: %#v", history)
+	}
+	if history[1].Role != "thinking" || history[1].Content != "先分析角色动机" {
+		t.Fatalf("thinking 展示事件未恢复: %#v", history[1])
+	}
+	if history[2].Role != "tool_call" || history[2].Name != "read_file" || history[2].Status != "success" {
+		t.Fatalf("工具卡片展示状态未恢复: %#v", history[2])
+	}
+	if history[2].Args != `{"path":"chapters/1.md"}` || history[2].Result != "章节内容" {
+		t.Fatalf("工具卡片参数和结果未恢复: %#v", history[2])
+	}
+}
+
+func TestContextCompactionPersistsOutsideVisibleHistory(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetOrCreate("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Append(schema.UserMessage("第一轮")); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Append(schema.AssistantMessage("第一答", nil)); err != nil {
+		t.Fatal(err)
+	}
+	record, err := sess.AppendContextCompaction(ContextCompaction{
+		AgentKind:           "ide",
+		Summary:             "保留目标和决定",
+		SourceStartIndex:    0,
+		SourceEndIndex:      2,
+		RetainedTurns:       8,
+		TokensBefore:        900,
+		TokensAfter:         120,
+		ContextWindowTokens: 1000,
+		Threshold:           0.9,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Epoch != 1 {
+		t.Fatalf("compaction epoch = %d, want 1", record.Epoch)
+	}
+	if len(sess.GetEffectiveMessages()) != 2 {
+		t.Fatalf("compaction must not alter effective raw messages: %#v", sess.GetEffectiveMessages())
+	}
+	if history := sess.History(); len(history) != 2 {
+		t.Fatalf("compaction must not appear in user-visible history: %#v", history)
+	}
+
+	reloadedStore, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := reloadedStore.Get("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, ok := reloaded.LatestContextCompaction("ide")
+	if !ok {
+		t.Fatal("expected reloaded compaction record")
+	}
+	if latest.Summary != "保留目标和决定" || latest.SourceEndIndex != 2 {
+		t.Fatalf("unexpected reloaded compaction: %#v", latest)
+	}
+	if history := reloaded.History(); len(history) != 2 {
+		t.Fatalf("reloaded visible history should stay raw: %#v", history)
+	}
+}
+
+func TestContextCompactionRemovalRestoresRawHistory(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetOrCreate("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Append(schema.UserMessage("第一轮")); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Append(schema.AssistantMessage("第一答", nil)); err != nil {
+		t.Fatal(err)
+	}
+	record, err := sess.AppendContextCompaction(ContextCompaction{
+		AgentKind:           "ide",
+		Summary:             "旧摘要",
+		SourceStartIndex:    0,
+		SourceEndIndex:      2,
+		RetainedTurns:       8,
+		TokensBefore:        900,
+		TokensAfter:         120,
+		ContextWindowTokens: 1000,
+		Threshold:           0.9,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal, removed, err := sess.RemoveLatestContextCompaction("ide", "user_rejected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !removed {
+		t.Fatal("expected active compaction to be removed")
+	}
+	if removal.CompactionID != record.ID || removal.SourceEndIndex != record.SourceEndIndex {
+		t.Fatalf("unexpected removal record: %#v for compaction %#v", removal, record)
+	}
+	if _, ok := sess.LatestContextCompaction("ide"); ok {
+		t.Fatal("removed compaction should not be active")
+	}
+	if latestRemoval, ok := sess.LatestContextCompactionRemoval("ide"); !ok || latestRemoval.CompactionID != record.ID {
+		t.Fatalf("expected latest removal for record %s, got %#v ok=%v", record.ID, latestRemoval, ok)
+	}
+	if history := sess.History(); len(history) != 2 {
+		t.Fatalf("visible history should stay raw after removal: %#v", history)
+	}
+
+	reloadedStore, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := reloadedStore.Get("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := reloaded.LatestContextCompaction("ide"); ok {
+		t.Fatal("removed compaction should stay inactive after reload")
+	}
+}
+
+func TestMultipleSessionsAreIsolatedAndActiveSessionPersists(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.GetOrCreate("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Append(schema.UserMessage("会话 A")); err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.Create("会话 B")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := second.Append(schema.UserMessage("会话 B")); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetActiveID(second.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, err := NewStore(store.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, err := reloaded.GetActiveOrCreate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active.ID != second.ID {
+		t.Fatalf("应恢复最近激活会话: want=%s got=%s", second.ID, active.ID)
+	}
+	if active.GetMessages()[0].Content != "会话 B" {
+		t.Fatalf("激活会话上下文不应串到其他会话: %#v", active.GetMessages())
+	}
+
+	metas, err := reloaded.List(active.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metas) != 2 {
+		t.Fatalf("应列出两个会话: %#v", metas)
+	}
+	if !metas[0].Active {
+		t.Fatalf("会话列表应标记当前激活会话: %#v", metas)
+	}
+}
+
+func TestDeleteRejectsOnlySession(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetOrCreate("default"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Delete("default"); err == nil {
+		t.Fatal("删除唯一会话应失败")
+	}
+}
+
+func TestListAndDeleteByPrefixForInteractiveSessions(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetOrCreate("default"); err != nil {
+		t.Fatal(err)
+	}
+	matching, err := store.GetOrCreate("interactive-story-st_001-main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := matching.Append(schema.UserMessage("互动故事")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetOrCreate("interactive-story-st_002-main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetOrCreate("interactive-setting-main"); err != nil {
+		t.Fatal(err)
+	}
+
+	metas, err := store.ListByPrefix("interactive-story-st_001-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metas) != 1 || metas[0].ID != "interactive-story-st_001-main" {
+		t.Fatalf("unexpected prefix sessions: %#v", metas)
+	}
+
+	if err := store.DeleteByPrefix("interactive-story-st_001-"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Get("interactive-story-st_001-main"); err == nil {
+		t.Fatal("matching interactive session should be deleted")
+	}
+	if _, err := store.Get("interactive-story-st_002-main"); err != nil {
+		t.Fatalf("other story session should remain: %v", err)
+	}
+	if _, err := store.Get("default"); err != nil {
+		t.Fatalf("default session should remain: %v", err)
+	}
+}
+
+func TestInterruptionPersistsPendingRecordAndCanResolve(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetOrCreate("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.MarkInterrupted("写第一章", "已经写出的片段", "runner error"); err != nil {
+		t.Fatal(err)
+	}
+
+	reloadedStore, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := reloadedStore.Get("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending := reloaded.PendingInterruption()
+	if pending == nil {
+		t.Fatal("异常中断标识应在重载后保留")
+	}
+	if pending.UserMessage != "写第一章" || pending.AssistantContent != "已经写出的片段" || pending.Reason != "runner error" {
+		t.Fatalf("异常中断信息不完整: %#v", pending)
+	}
+
+	if err := reloaded.ResolveInterruption(pending.ID); err != nil {
+		t.Fatal(err)
+	}
+	reloadedAgain, err := reloadedStore.Get("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloadedAgain.PendingInterruption(); got != nil {
+		t.Fatalf("已解决的中断不应继续待恢复: %#v", got)
+	}
+}

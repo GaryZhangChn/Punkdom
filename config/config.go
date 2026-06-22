@@ -1,0 +1,322 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strconv"
+
+	toml "github.com/pelletier/go-toml/v2"
+)
+
+// Config 保存 Punkdom 的全局配置
+type Config struct {
+	OpenAIAPIKey                string                 `toml:"openai_api_key"`
+	OpenAIBaseURL               string                 `toml:"openai_base_url"`
+	OpenAIModel                 string                 `toml:"openai_model"`
+	OpenAIContextWindowTokens   int                    `toml:"openai_context_window_tokens"`
+	ModelProfiles               []ModelProfileSettings `toml:"model_profiles"`
+	AgentModels                 AgentModelSettings     `toml:"agent_models"`
+	AgentTools                  AgentToolSettings      `toml:"agent_tools"`
+	AgentPrompts                AgentPromptSettings    `toml:"agent_prompts"`
+	AgentSkills                 AgentSkillSettings     `toml:"agent_skills"`
+	AgentContexts               AgentContextSettings   `toml:"agent_context"`
+	SkillsDir                   string                 `toml:"skills_dir"`
+	BackendPort                 int                    `toml:"backend_port"`
+	FrontendPort                int                    `toml:"frontend_port"`
+	PunkdomDir                     string                 `toml:"punkdom_dir"`
+	Workspace                   string                 `toml:"workspace"`
+	IDEStoryTellerID            string                 `toml:"-"`
+	MaxIteration                int                    `toml:"max_iteration"`
+	ModelMaxRetries             int                    `toml:"model_max_retries"`
+	ChapterFilenameFormat       string                 `toml:"-"`
+	VolumeDirFormat             string                 `toml:"-"`
+	DraftFlowEnabled            bool                   `toml:"-"`
+	ChapterGroupMin             int                    `toml:"-"`
+	ChapterGroupMax             int                    `toml:"-"`
+	VersionTimedEnabled         bool                   `toml:"-"`
+	VersionTimedIntervalMinutes int                    `toml:"-"`
+	VersionAgentEnabled         bool                   `toml:"-"`
+	VersionAgentCharThreshold   int                    `toml:"-"`
+	InteractiveReplyTargetChars int                    `toml:"-"`
+	InteractiveMaxTokens        int                    `toml:"-"`
+	InteractiveHotChoices       bool                   `toml:"-"`
+	ResumeLastWorkspace         bool                   `toml:"-"`
+	UpdateCheckEnabled          bool                   `toml:"-"`
+}
+
+// LoadWithWorkspace 在已知 workspace 时读取分层配置（默认 < 用户级 < 工作区级 < 环境变量）。
+func LoadWithWorkspace(workspace string) (*Config, LayeredSettings, error) {
+	global := loadGlobalConfig()
+	punkdomDir := global.PunkdomDir
+	if punkdomDir == "" {
+		punkdomDir = defaultPunkdomDir()
+	}
+	if v := os.Getenv("PUNKDOM_DIR"); v != "" {
+		punkdomDir = v
+	}
+	if punkdomDir == "" {
+		punkdomDir = defaultPunkdomDir()
+	}
+	punkdomDir = normalizePath(punkdomDir)
+
+	globalSettings := settingsFromConfig(global)
+	globalSettings.PunkdomDir = punkdomDir
+
+	layered, err := LoadLayeredWithGlobal(punkdomDir, workspace, globalSettings)
+	if err != nil {
+		return nil, LayeredSettings{}, err
+	}
+
+	s := layered.Effective
+	cfg := &Config{
+		OpenAIAPIKey:                s.OpenAIAPIKey,
+		OpenAIBaseURL:               s.OpenAIBaseURL,
+		OpenAIModel:                 s.OpenAIModel,
+		OpenAIContextWindowTokens:   settingsInt(s.OpenAIContextWindowTokens, DefaultContextWindowTokens),
+		ModelProfiles:               s.ModelProfiles,
+		AgentModels:                 s.AgentModels,
+		AgentTools:                  s.AgentTools,
+		AgentPrompts:                s.AgentPrompts,
+		AgentSkills:                 s.AgentSkills,
+		AgentContexts:               s.AgentContexts,
+		SkillsDir:                   s.SkillsDir,
+		BackendPort:                 settingsInt(s.BackendPort, 8080),
+		FrontendPort:                settingsInt(s.FrontendPort, 5173),
+		PunkdomDir:                     punkdomDir,
+		Workspace:                   workspace,
+		IDEStoryTellerID:            s.IDEStoryTellerID,
+		MaxIteration:                settingsInt(s.MaxIteration, 50),
+		ModelMaxRetries:             settingsInt(s.ModelMaxRetries, 5),
+		ChapterFilenameFormat:       s.ChapterFilenameFormat,
+		VolumeDirFormat:             s.VolumeDirFormat,
+		DraftFlowEnabled:            settingsBool(s.DraftFlowEnabled, false),
+		ChapterGroupMin:             settingsInt(s.ChapterGroupMin, 3),
+		ChapterGroupMax:             settingsInt(s.ChapterGroupMax, 8),
+		VersionTimedEnabled:         settingsBool(s.VersionTimedEnabled, true),
+		VersionTimedIntervalMinutes: settingsInt(s.VersionTimedIntervalMinutes, 10),
+		VersionAgentEnabled:         settingsBool(s.VersionAgentEnabled, true),
+		VersionAgentCharThreshold:   settingsInt(s.VersionAgentCharThreshold, 3000),
+		InteractiveReplyTargetChars: 2000,
+		InteractiveMaxTokens:        settingsInt(s.InteractiveMaxTokens, 0),
+		InteractiveHotChoices:       settingsBool(s.InteractiveHotChoices, true),
+		ResumeLastWorkspace:         true,
+		UpdateCheckEnabled:          settingsBool(s.UpdateCheckEnabled, true),
+	}
+
+	// 环境变量始终最高优先级
+	overrideFromEnv(cfg)
+
+	if cfg.Workspace != "" {
+		if abs, err := filepath.Abs(cfg.Workspace); err == nil {
+			cfg.Workspace = abs
+		}
+	}
+	if cfg.SkillsDir != "" {
+		cfg.SkillsDir = normalizePath(cfg.SkillsDir)
+	}
+	if cfg.PunkdomDir == "" {
+		cfg.PunkdomDir = normalizePath(defaultPunkdomDir())
+	} else {
+		cfg.PunkdomDir = normalizePath(cfg.PunkdomDir)
+	}
+	return cfg, layered, nil
+}
+
+func loadGlobalConfig() *Config {
+	cfg := &Config{}
+	for _, path := range globalConfigCandidates() {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if err := toml.Unmarshal(data, cfg); err != nil {
+			continue
+		}
+		return cfg
+	}
+	return cfg
+}
+
+func settingsFromConfig(cfg *Config) Settings {
+	if cfg == nil {
+		return Settings{}
+	}
+	settings := Settings{
+		OpenAIAPIKey:          cfg.OpenAIAPIKey,
+		OpenAIBaseURL:         cfg.OpenAIBaseURL,
+		OpenAIModel:           cfg.OpenAIModel,
+		ModelProfiles:         cfg.ModelProfiles,
+		AgentModels:           cfg.AgentModels,
+		AgentTools:            cfg.AgentTools,
+		AgentPrompts:          cfg.AgentPrompts,
+		AgentSkills:           cfg.AgentSkills,
+		AgentContexts:         cfg.AgentContexts,
+		SkillsDir:             cfg.SkillsDir,
+		PunkdomDir:               cfg.PunkdomDir,
+		ChapterFilenameFormat: cfg.ChapterFilenameFormat,
+		VolumeDirFormat:       cfg.VolumeDirFormat,
+	}
+	if cfg.BackendPort > 0 {
+		settings.BackendPort = &cfg.BackendPort
+	}
+	if cfg.FrontendPort > 0 {
+		settings.FrontendPort = &cfg.FrontendPort
+	}
+	if cfg.MaxIteration > 0 {
+		settings.MaxIteration = &cfg.MaxIteration
+	}
+	if cfg.ModelMaxRetries > 0 {
+		settings.ModelMaxRetries = &cfg.ModelMaxRetries
+	}
+	if cfg.OpenAIContextWindowTokens > 0 {
+		settings.OpenAIContextWindowTokens = &cfg.OpenAIContextWindowTokens
+	}
+	return settings
+}
+
+func globalConfigCandidates() []string {
+	candidates := []string{"config.toml"}
+	if exe, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(exe), "config.toml"))
+	}
+	return candidates
+}
+
+// Load 加载启动配置；默认不指定 workspace，让 App 恢复上次打开的书籍或进入无书籍状态。
+func Load() *Config {
+	cfg, _, err := LoadWithWorkspace("")
+	if err != nil || cfg == nil {
+		// fallback：返回纯默认值 + env，保持启动不挂
+		d := DefaultSettings()
+		cfg = &Config{
+			OpenAIBaseURL:               d.OpenAIBaseURL,
+			OpenAIModel:                 d.OpenAIModel,
+			OpenAIContextWindowTokens:   settingsInt(d.OpenAIContextWindowTokens, DefaultContextWindowTokens),
+			ModelProfiles:               d.ModelProfiles,
+			AgentModels:                 d.AgentModels,
+			AgentTools:                  d.AgentTools,
+			AgentPrompts:                d.AgentPrompts,
+			AgentSkills:                 d.AgentSkills,
+			AgentContexts:               d.AgentContexts,
+			SkillsDir:                   d.SkillsDir,
+			BackendPort:                 settingsInt(d.BackendPort, 8080),
+			FrontendPort:                settingsInt(d.FrontendPort, 5173),
+			PunkdomDir:                     normalizePath(d.PunkdomDir),
+			IDEStoryTellerID:            d.IDEStoryTellerID,
+			MaxIteration:                settingsInt(d.MaxIteration, 50),
+			ModelMaxRetries:             settingsInt(d.ModelMaxRetries, 5),
+			ChapterFilenameFormat:       d.ChapterFilenameFormat,
+			VolumeDirFormat:             d.VolumeDirFormat,
+			DraftFlowEnabled:            settingsBool(d.DraftFlowEnabled, false),
+			ChapterGroupMin:             settingsInt(d.ChapterGroupMin, 3),
+			ChapterGroupMax:             settingsInt(d.ChapterGroupMax, 8),
+			VersionTimedEnabled:         settingsBool(d.VersionTimedEnabled, true),
+			VersionTimedIntervalMinutes: settingsInt(d.VersionTimedIntervalMinutes, 10),
+			VersionAgentEnabled:         settingsBool(d.VersionAgentEnabled, true),
+			VersionAgentCharThreshold:   settingsInt(d.VersionAgentCharThreshold, 3000),
+			InteractiveReplyTargetChars: 2000,
+			InteractiveMaxTokens:        settingsInt(d.InteractiveMaxTokens, 0),
+			InteractiveHotChoices:       settingsBool(d.InteractiveHotChoices, true),
+			ResumeLastWorkspace:         true,
+			UpdateCheckEnabled:          settingsBool(d.UpdateCheckEnabled, true),
+		}
+		overrideFromEnv(cfg)
+		if cfg.Workspace != "" {
+			if abs, err := filepath.Abs(cfg.Workspace); err == nil {
+				cfg.Workspace = abs
+			}
+		}
+		if cfg.SkillsDir != "" {
+			cfg.SkillsDir = normalizePath(cfg.SkillsDir)
+		}
+	}
+	return cfg
+}
+
+func settingsInt(v *int, fallback int) int {
+	if v == nil || *v <= 0 {
+		return fallback
+	}
+	return *v
+}
+
+func settingsBool(v *bool, fallback bool) bool {
+	if v == nil {
+		return fallback
+	}
+	return *v
+}
+
+// LoadForWorkspace 加载配置并明确指定 workspace，用于 CLI 参数场景。
+func LoadForWorkspace(workspace string) *Config {
+	cfg, _, err := LoadWithWorkspace(workspace)
+	if err != nil || cfg == nil {
+		cfg = Load()
+		cfg.Workspace = workspace
+	}
+	if cfg.Workspace != "" {
+		if abs, err := filepath.Abs(cfg.Workspace); err == nil {
+			cfg.Workspace = abs
+		}
+	}
+	return cfg
+}
+
+// overrideFromEnv 用环境变量覆盖配置
+func overrideFromEnv(cfg *Config) {
+	if v := os.Getenv("OPENAI_API_KEY"); v != "" {
+		cfg.OpenAIAPIKey = v
+	}
+	if v := os.Getenv("OPENAI_BASE_URL"); v != "" {
+		cfg.OpenAIBaseURL = v
+	}
+	if v := os.Getenv("OPENAI_MODEL"); v != "" {
+		cfg.OpenAIModel = v
+	}
+	if v := os.Getenv("PUNKDOM_SKILLS_DIR"); v != "" {
+		cfg.SkillsDir = v
+	}
+	if v := os.Getenv("PUNKDOM_DIR"); v != "" {
+		cfg.PunkdomDir = v
+	}
+	if v := os.Getenv("PUNKDOM_WORKSPACE"); v != "" {
+		cfg.Workspace = v
+	}
+	if v := os.Getenv("PUNKDOM_BACKEND_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil && port >= 1 && port <= 65535 {
+			cfg.BackendPort = port
+		}
+	}
+	if v := os.Getenv("PUNKDOM_FRONTEND_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil && port >= 1 && port <= 65535 {
+			cfg.FrontendPort = port
+		}
+	}
+}
+
+func defaultPunkdomDir() string {
+	return "./.punkdom"
+}
+
+func normalizePath(path string) string {
+	path = expandHome(path)
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return path
+}
+
+func expandHome(path string) string {
+	if path == "~" {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			return home
+		}
+		return path
+	}
+	if len(path) > 2 && path[:2] == "~/" {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			return filepath.Join(home, path[2:])
+		}
+	}
+	return path
+}

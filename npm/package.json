@@ -1,0 +1,29 @@
+{
+  "name": "@punkdom/punkdom",
+  "version": "0.1.0",
+  "description": "Punkdom v0.1 AI creative workspace",
+  "type": "module",
+  "bin": {
+    "punkdom": "./bin/punkdom.js"
+  },
+  "scripts": {
+    "build": "node ../scripts/build-npm-package.mjs",
+    "prepack": "node ../scripts/build-npm-package.mjs",
+    "pack:dry": "npm pack --dry-run"
+  },
+  "files": [
+    "bin",
+    "vendor",
+    "web",
+    "skills",
+    "config.toml",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "Apache-2.0"
+}

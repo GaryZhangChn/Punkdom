@@ -1,0 +1,880 @@
+@import "tailwindcss";
+
+:root {
+  --punkdom-bg: #1a1a1a;
+  --punkdom-bg-deep: #050505;
+  --punkdom-surface: #111111;
+  --punkdom-surface-2: #171717;
+  --punkdom-surface-3: #202020;
+  --punkdom-hover: #262626;
+  --punkdom-active: #2f2f2f;
+  --punkdom-border: #2a2a2a;
+  --punkdom-border-soft: #222222;
+  --punkdom-text: #ffffff;
+  --punkdom-text-muted: #a3a3a3;
+  --punkdom-text-faint: #737373;
+  --punkdom-accent: #a8adb7;
+  --punkdom-accent-blue: #7fa7d9;
+  --punkdom-accent-green: #81b38d;
+  --punkdom-danger: #ff6b6b;
+  --punkdom-danger-bg: rgba(255, 107, 107, 0.12);
+  --punkdom-danger-border: rgba(255, 107, 107, 0.42);
+  --punkdom-warning: #f4d58d;
+  --punkdom-warning-bg: rgba(240, 198, 116, 0.22);
+  --punkdom-success: #b2f2bb;
+  --punkdom-success-muted: #8fbc8f;
+  --punkdom-success-bg: rgba(47, 158, 68, 0.2);
+  --punkdom-field-focus-border: #3a3a3a;
+  --punkdom-app-shell-glow: rgba(255, 255, 255, 0.035);
+  --punkdom-topbar-shadow: rgba(255, 255, 255, 0.025);
+  --punkdom-control-shadow: rgba(255, 255, 255, 0.028);
+  --punkdom-user-message-border: #4a4a4a;
+  --punkdom-user-message-bg-from: #4a4a4a;
+  --punkdom-user-message-bg-to: #3f3f3f;
+  --punkdom-user-message-text: #ffffff;
+  --punkdom-assistant-message-border: #303030;
+  --punkdom-assistant-message-bg: #141414;
+  --punkdom-chat-heading: #d7dbe2;
+  --punkdom-menu-bg: rgba(32, 33, 36, 0.95);
+  --punkdom-menu-item-hover-bg: rgba(74, 77, 84, 0.25);
+  --punkdom-selection-bg: rgba(74, 77, 84, 0.25);
+  --punkdom-drop-bg: #2c3a4d;
+  --punkdom-tree-text: #aeb4bf;
+  --punkdom-tree-icon: #858b96;
+  --punkdom-tree-folder: #a8adb7;
+  --punkdom-tree-chevron: #6f7682;
+  --punkdom-chip-bg: rgba(74, 77, 84, 0.2);
+  --punkdom-chip-hover-bg: rgba(74, 77, 84, 0.25);
+  --punkdom-style-chip-bg: rgba(139, 92, 246, 0.2);
+  --punkdom-style-chip-hover-bg: rgba(139, 92, 246, 0.25);
+  --punkdom-style-chip-text: #ddd6fe;
+  --punkdom-lore-chip-bg: rgba(15, 118, 110, 0.2);
+  --punkdom-lore-chip-hover-bg: rgba(15, 118, 110, 0.25);
+  --punkdom-lore-chip-text: #99f6e4;
+  --punkdom-code-bg: #303238;
+  --punkdom-code-text: #d7dbe2;
+  --punkdom-code-block-bg: #1f2023;
+  --punkdom-table-header-bg: #25262a;
+  --punkdom-markdown-border: #303238;
+  --punkdom-scrollbar-track: #0f0f0f;
+  --punkdom-scrollbar-thumb: #3f3f3f;
+  --punkdom-scrollbar-thumb-hover: #5a5a5a;
+  --punkdom-editor-ide-bg: #1a1a1a;
+  --punkdom-editor-ide-color: #ffffff;
+  --punkdom-editor-ide-accent: #303238;
+  --punkdom-radius: 8px;
+  --punkdom-ease: cubic-bezier(0.25, 1.1, 0.4, 1);
+  --punkdom-motion-fast: 140ms;
+  --punkdom-motion-normal: 220ms;
+  --punkdom-motion-slow: 280ms;
+  --punkdom-shadow: 0 18px 50px rgba(0, 0, 0, 0.36);
+  --punkdom-ui-font-size: 14px;
+  --punkdom-ui-line-height: 20px;
+  --punkdom-ui-sm-font-size: 16px;
+  --punkdom-ui-sm-line-height: 22px;
+  --punkdom-ui-caption-size: 13px;
+  --punkdom-ui-compact-font-size: 13px;
+  --punkdom-ui-compact-line-height: 18px;
+  --punkdom-ui-micro-font-size: 12px;
+  --punkdom-ui-micro-line-height: 16px;
+  --punkdom-reading-font-size: 18px;
+  --punkdom-ui-font-family: "SF Pro Text", "SF Pro Display", "PingFang SC", "Hiragino Sans GB", -apple-system, BlinkMacSystemFont, sans-serif;
+  --punkdom-reading-font-family: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", "SimSun", serif;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --punkdom-bg: #edf1f5;
+  --punkdom-bg-deep: #dfe5ec;
+  --punkdom-surface: #f6f8fa;
+  --punkdom-surface-2: #eef2f6;
+  --punkdom-surface-3: #e4e9f0;
+  --punkdom-hover: #e1e7ef;
+  --punkdom-active: #d7e0eb;
+  --punkdom-border: #cbd4df;
+  --punkdom-border-soft: #dce3eb;
+  --punkdom-text: #000000;
+  --punkdom-text-muted: #536071;
+  --punkdom-text-faint: #7a8493;
+  --punkdom-accent: #536a86;
+  --punkdom-accent-blue: #2f6fae;
+  --punkdom-accent-green: #3f7f54;
+  --punkdom-danger: #b42318;
+  --punkdom-danger-bg: rgba(180, 35, 24, 0.1);
+  --punkdom-danger-border: rgba(180, 35, 24, 0.32);
+  --punkdom-warning: #7a5200;
+  --punkdom-warning-bg: rgba(180, 122, 16, 0.18);
+  --punkdom-success: #156f3f;
+  --punkdom-success-muted: #2f6f46;
+  --punkdom-success-bg: rgba(21, 111, 63, 0.12);
+  --punkdom-field-focus-border: #9ba8b8;
+  --punkdom-app-shell-glow: transparent;
+  --punkdom-topbar-shadow: rgba(24, 32, 42, 0.08);
+  --punkdom-control-shadow: rgba(24, 32, 42, 0.055);
+  --punkdom-shadow: 0 18px 44px rgba(46, 58, 76, 0.16);
+  --punkdom-user-message-border: #b5c3d5;
+  --punkdom-user-message-bg-from: #e4ebf4;
+  --punkdom-user-message-bg-to: #d8e2ee;
+  --punkdom-user-message-text: #000000;
+  --punkdom-assistant-message-border: #d4dde7;
+  --punkdom-assistant-message-bg: #f6f8fa;
+  --punkdom-chat-heading: #1f2937;
+  --punkdom-menu-bg: rgba(246, 248, 250, 0.97);
+  --punkdom-menu-item-hover-bg: rgba(49, 65, 86, 0.09);
+  --punkdom-selection-bg: rgba(55, 87, 125, 0.15);
+  --punkdom-drop-bg: #d5e2f1;
+  --punkdom-tree-text: #000000;
+  --punkdom-tree-icon: #536071;
+  --punkdom-tree-folder: #2f6fae;
+  --punkdom-tree-chevron: #667085;
+  --punkdom-chip-bg: rgba(47, 111, 174, 0.12);
+  --punkdom-chip-hover-bg: rgba(47, 111, 174, 0.18);
+  --punkdom-style-chip-bg: rgba(96, 72, 176, 0.12);
+  --punkdom-style-chip-hover-bg: rgba(96, 72, 176, 0.18);
+  --punkdom-style-chip-text: #3d2f82;
+  --punkdom-lore-chip-bg: rgba(15, 118, 110, 0.12);
+  --punkdom-lore-chip-hover-bg: rgba(15, 118, 110, 0.18);
+  --punkdom-lore-chip-text: #075f57;
+  --punkdom-code-bg: #e1e7ef;
+  --punkdom-code-text: #1f2937;
+  --punkdom-code-block-bg: #e7edf4;
+  --punkdom-table-header-bg: #e3eaf2;
+  --punkdom-markdown-border: #ccd6e2;
+  --punkdom-scrollbar-track: #e7edf3;
+  --punkdom-scrollbar-thumb: #b6c1cf;
+  --punkdom-scrollbar-thumb-hover: #8f9cad;
+  --punkdom-editor-ide-bg: #f6f8fa;
+  --punkdom-editor-ide-color: #000000;
+  --punkdom-editor-ide-accent: #d7dee8;
+  color-scheme: light;
+}
+
+[data-theme="light"] [data-punkdom-app-shell="true"] {
+  background: var(--punkdom-bg);
+}
+
+[data-theme="light"] .punkdom-topbar,
+[data-theme="light"] .punkdom-chat-input-area,
+[data-theme="light"] .punkdom-editor-toolbar,
+[data-theme="light"] .punkdom-editor-statusbar {
+  background: var(--punkdom-surface);
+}
+
+[data-theme="light"] .punkdom-chat-canvas {
+  background: var(--punkdom-surface-2);
+}
+
+[data-theme="light"] .punkdom-chat-composer {
+  box-shadow:
+    inset 0 1px 0 var(--punkdom-control-shadow),
+    0 8px 20px rgba(35, 48, 66, 0.08);
+}
+
+[data-theme="light"] .punkdom-command-menu,
+[data-theme="light"] .punkdom-editor-settings-panel {
+  box-shadow:
+    0 16px 40px rgba(35, 48, 66, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--punkdom-bg);
+  color: var(--punkdom-text);
+  font-family: var(--punkdom-ui-font-family);
+  font-feature-settings: "kern";
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  transition-property: color, background-color, border-color, opacity, transform, box-shadow;
+  transition-duration: var(--punkdom-motion-normal);
+  transition-timing-function: var(--punkdom-ease);
+}
+
+html[data-punkdom-motion="reduced"] {
+  --punkdom-motion-fast: 80ms;
+  --punkdom-motion-normal: 120ms;
+  --punkdom-motion-slow: 140ms;
+}
+
+html[data-punkdom-motion="off"] {
+  --punkdom-motion-fast: 1ms;
+  --punkdom-motion-normal: 1ms;
+  --punkdom-motion-slow: 1ms;
+}
+
+html[data-punkdom-motion="off"] *,
+html[data-punkdom-motion="off"] *::before,
+html[data-punkdom-motion="off"] *::after {
+  scroll-behavior: auto !important;
+  transition-duration: 1ms !important;
+  animation-duration: 1ms !important;
+  animation-iteration-count: 1 !important;
+}
+
+[data-punkdom-app-shell="true"] {
+  background:
+    radial-gradient(circle at 16% 0%, var(--punkdom-app-shell-glow), transparent 26%),
+    var(--punkdom-bg);
+  color: var(--punkdom-text);
+  font-size: var(--punkdom-ui-font-size);
+  line-height: var(--punkdom-ui-line-height);
+}
+
+[data-punkdom-mobile-shell="true"] {
+  height: 100dvh;
+}
+
+.punkdom-mobile-nav {
+  padding-bottom: max(0.375rem, env(safe-area-inset-bottom));
+}
+
+.punkdom-mobile-nav-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.punkdom-mobile-nav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.punkdom-mobile-drawer-backdrop {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@supports not (height: 100dvh) {
+  [data-punkdom-mobile-shell="true"] {
+    height: 100vh;
+  }
+}
+
+[data-punkdom-app-shell="true"] .text-xs {
+  font-size: var(--punkdom-ui-font-size);
+  line-height: var(--punkdom-ui-line-height);
+}
+
+[data-punkdom-app-shell="true"] .text-sm {
+  font-size: var(--punkdom-ui-sm-font-size);
+  line-height: var(--punkdom-ui-sm-line-height);
+}
+
+[data-punkdom-app-shell="true"] [class*="text-[11px]"] {
+  font-size: var(--punkdom-ui-compact-font-size);
+  line-height: var(--punkdom-ui-compact-line-height);
+}
+
+:where([data-punkdom-app-shell="true"], [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="popover-content"], [data-slot="command"], .punkdom-command-menu, .punkdom-panel) [class*="text-[10px]"] {
+  font-size: var(--punkdom-ui-micro-font-size);
+  line-height: var(--punkdom-ui-micro-line-height);
+}
+
+:where([data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="popover-content"], [data-slot="command"], .punkdom-command-menu, .punkdom-panel) .text-xs {
+  font-size: var(--punkdom-ui-font-size);
+  line-height: var(--punkdom-ui-line-height);
+}
+
+@media (max-width: 767px) {
+  html,
+  body,
+  #root {
+    overflow: hidden;
+  }
+
+  [data-punkdom-mobile-shell="true"] .punkdom-story-stage-header {
+    min-height: auto;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  [data-punkdom-mobile-shell="true"] .punkdom-story-stage-title {
+    width: 100%;
+  }
+
+  [data-punkdom-mobile-shell="true"] .punkdom-story-stage-controls {
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 0.125rem;
+    scrollbar-width: none;
+  }
+
+  [data-punkdom-mobile-shell="true"] .punkdom-story-stage-controls::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-punkdom-mobile-shell="true"] .punkdom-story-stage-controls > * {
+    flex-shrink: 0;
+  }
+
+  [data-punkdom-mobile-shell="true"] .punkdom-story-stage-composer-row {
+    align-items: flex-end;
+    gap: 0.5rem;
+  }
+
+  [data-punkdom-mobile-shell="true"] .punkdom-story-stage-composer-row > button {
+    flex-shrink: 0;
+  }
+
+  [data-punkdom-mobile-shell="true"] .punkdom-command-menu {
+    width: min(calc(100vw - 1.5rem), 384px) !important;
+  }
+}
+
+:where([data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="popover-content"], [data-slot="command"], .punkdom-command-menu, .punkdom-panel) .text-sm {
+  font-size: var(--punkdom-ui-sm-font-size);
+  line-height: var(--punkdom-ui-sm-line-height);
+}
+
+:where([data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="popover-content"], [data-slot="command"], .punkdom-command-menu, .punkdom-panel) [class*="text-[11px]"] {
+  font-size: var(--punkdom-ui-compact-font-size);
+  line-height: var(--punkdom-ui-compact-line-height);
+}
+
+.punkdom-topbar {
+  border-color: var(--punkdom-border);
+  background: color-mix(in srgb, var(--punkdom-surface) 92%, transparent);
+  color: var(--punkdom-text-muted);
+  box-shadow: inset 0 -1px 0 var(--punkdom-topbar-shadow);
+  backdrop-filter: blur(18px);
+  font-size: var(--punkdom-ui-font-size);
+  line-height: var(--punkdom-ui-line-height);
+}
+
+.punkdom-activity-bar {
+  border-color: var(--punkdom-border);
+  background: var(--punkdom-bg-deep);
+  color: var(--punkdom-text-muted);
+  transition-duration: var(--punkdom-motion-slow) !important;
+}
+
+.punkdom-sidebar {
+  border-color: var(--punkdom-border);
+  background: var(--punkdom-surface);
+}
+
+.punkdom-panel {
+  border-color: var(--punkdom-border);
+  background: var(--punkdom-surface-2);
+  font-size: var(--punkdom-ui-font-size);
+  line-height: var(--punkdom-ui-line-height);
+}
+
+.punkdom-subpanel {
+  border-color: var(--punkdom-border);
+  background: var(--punkdom-surface);
+}
+
+.punkdom-icon-button {
+  height: 40px;
+  width: 40px;
+  min-width: 40px;
+  border-radius: var(--punkdom-radius);
+  color: var(--punkdom-text-muted);
+}
+
+.punkdom-activity-bar.is-expanded .punkdom-icon-button {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.punkdom-statusbar {
+  font-size: var(--punkdom-ui-compact-font-size);
+  line-height: var(--punkdom-ui-compact-line-height);
+}
+
+.punkdom-icon-button:hover {
+  background: var(--punkdom-surface);
+  color: var(--punkdom-text-muted);
+}
+
+.punkdom-icon-button.is-active,
+.punkdom-nav-item.is-active {
+  background: var(--punkdom-active);
+  color: var(--punkdom-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.punkdom-nav-item {
+  border-radius: var(--punkdom-radius);
+  color: var(--punkdom-text-muted);
+  font-size: var(--punkdom-ui-font-size);
+  line-height: var(--punkdom-ui-line-height);
+  transition: color var(--punkdom-motion-normal) var(--punkdom-ease), background-color var(--punkdom-motion-normal) var(--punkdom-ease), border-color var(--punkdom-motion-normal) var(--punkdom-ease), transform var(--punkdom-motion-normal) var(--punkdom-ease);
+}
+
+.punkdom-nav-item:hover {
+  background: var(--punkdom-hover);
+  color: var(--punkdom-text);
+}
+
+.punkdom-field {
+  border-color: var(--punkdom-border);
+  background: var(--punkdom-surface-2);
+  color: var(--punkdom-text);
+  font-size: var(--punkdom-ui-font-size);
+  line-height: var(--punkdom-ui-line-height);
+}
+
+.punkdom-ui-compact {
+  font-size: var(--punkdom-ui-compact-font-size);
+  line-height: var(--punkdom-ui-compact-line-height);
+}
+
+.punkdom-field:hover,
+.punkdom-field:focus-within {
+  border-color: var(--punkdom-field-focus-border);
+  background: var(--punkdom-surface-3);
+}
+
+.punkdom-chat-canvas {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--punkdom-surface-2) 88%, var(--punkdom-surface-3) 12%), var(--punkdom-surface-2) 220px),
+    var(--punkdom-surface-2);
+}
+
+.punkdom-chat-input-area {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--punkdom-surface) 78%, transparent), var(--punkdom-surface) 42%),
+    var(--punkdom-surface);
+  box-shadow: inset 0 1px 0 var(--punkdom-topbar-shadow);
+}
+
+.punkdom-chat-composer {
+  box-shadow:
+    inset 0 1px 0 var(--punkdom-control-shadow),
+    0 10px 28px rgba(0, 0, 0, 0.18);
+  transition: border-color var(--punkdom-motion-normal) var(--punkdom-ease), background-color var(--punkdom-motion-normal) var(--punkdom-ease), box-shadow var(--punkdom-motion-normal) var(--punkdom-ease);
+}
+
+.punkdom-chat-composer:focus-within {
+  border-color: var(--punkdom-field-focus-border);
+  background: color-mix(in srgb, var(--punkdom-surface-2) 72%, var(--punkdom-surface-3) 28%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 0 1px rgba(163, 163, 163, 0.08),
+    0 14px 34px rgba(0, 0, 0, 0.22);
+}
+
+.punkdom-command-menu {
+  background: var(--punkdom-menu-bg);
+  box-shadow:
+    0 20px 48px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.punkdom-user-message {
+  border: 1px solid var(--punkdom-user-message-border);
+  background:
+    linear-gradient(180deg, var(--punkdom-user-message-bg-from), var(--punkdom-user-message-bg-to));
+  font-size: var(--punkdom-ui-sm-font-size);
+  line-height: 1.72;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 26px rgba(0, 0, 0, 0.16);
+}
+
+.punkdom-assistant-message {
+  border: 1px solid var(--punkdom-assistant-message-border);
+  border-radius: var(--punkdom-radius);
+  background:
+    linear-gradient(180deg, var(--punkdom-assistant-message-bg), var(--punkdom-surface) 68%);
+  padding: 12px 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.028),
+    0 12px 30px rgba(0, 0, 0, 0.14);
+}
+
+.punkdom-editor-toolbar,
+.punkdom-editor-statusbar {
+  border-color: var(--punkdom-border);
+  background: color-mix(in srgb, var(--punkdom-surface) 92%, var(--punkdom-surface-3) 8%);
+  box-shadow: inset 0 1px 0 var(--punkdom-topbar-shadow);
+}
+
+.punkdom-editor-settings-panel {
+  background:
+    linear-gradient(180deg, var(--punkdom-surface-3), var(--punkdom-surface) 72%),
+    var(--punkdom-surface);
+  box-shadow:
+    0 20px 48px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.punkdom-editor-control {
+  box-shadow: inset 0 1px 0 var(--punkdom-control-shadow);
+}
+
+.punkdom-editor-range {
+  height: 18px;
+  accent-color: var(--punkdom-accent);
+}
+
+.punkdom-editor-range:focus-visible {
+  outline: 1px solid rgba(168, 173, 183, 0.45);
+  outline-offset: 3px;
+}
+
+.punkdom-editor-theme-option {
+  transition: border-color var(--punkdom-motion-normal) var(--punkdom-ease), background-color var(--punkdom-motion-normal) var(--punkdom-ease), color var(--punkdom-motion-normal) var(--punkdom-ease), box-shadow var(--punkdom-motion-normal) var(--punkdom-ease);
+}
+
+.punkdom-editor-theme-option.is-active {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 8px 22px rgba(0, 0, 0, 0.16);
+}
+
+.punkdom-muted {
+  color: var(--punkdom-text-muted);
+}
+
+.punkdom-faint {
+  color: var(--punkdom-text-faint);
+}
+
+.punkdom-resize-handle:hover,
+.punkdom-resize-handle[data-resize-handle-active] {
+  background: color-mix(in srgb, var(--punkdom-active) 78%, transparent);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--punkdom-scrollbar-thumb) var(--punkdom-scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--punkdom-scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid var(--punkdom-scrollbar-track);
+  border-radius: 999px;
+  background: var(--punkdom-scrollbar-thumb);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--punkdom-scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--punkdom-scrollbar-track);
+}
+
+/* TipTap 编辑器内容样式 */
+.editor-content .tiptap {
+  outline: none;
+  min-height: 100%;
+  color: var(--punkdom-editor-color, #d7dbe2);
+  font-family: var(--punkdom-reading-font-family);
+  font-size: var(--punkdom-editor-font-size, var(--punkdom-reading-font-size, 18px));
+  letter-spacing: 0;
+  line-height: var(--punkdom-editor-line-height, 1.9);
+  max-width: 760px;
+  margin: 0 auto;
+  padding-bottom: 40vh;
+}
+
+.editor-content .tiptap p {
+  margin: 0;
+  line-height: var(--punkdom-editor-line-height, 1.9);
+  text-indent: 2em;
+}
+
+/* hardBreak 缩进：让 br 换行后的行也有 2em 缩进 */
+.editor-content .tiptap .punkdom-hard-break::after {
+  content: '';
+  display: inline-block;
+  width: 2em;
+}
+
+/* 文本自带缩进时，关闭 CSS 缩进避免双重缩进 */
+.editor-content.native-indent .tiptap p {
+  text-indent: 0;
+}
+.editor-content.native-indent .tiptap .punkdom-hard-break::after {
+  width: 0;
+}
+
+.editor-content .tiptap h1 {
+  font-size: 1.45em;
+  font-weight: 700;
+  margin: 0 0 0.65em;
+  line-height: 1.3;
+}
+
+.editor-content .tiptap h2 {
+  font-size: 1.2em;
+  font-weight: 600;
+  margin: 0.4em 0 0.3em;
+  line-height: 1.3;
+}
+
+.editor-content .tiptap h3 {
+  font-size: 1.05em;
+  font-weight: 600;
+  margin: 0.35em 0 0.2em;
+  line-height: 1.4;
+}
+
+.editor-content .tiptap ul,
+.editor-content .tiptap ol {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.editor-content .tiptap ul {
+  list-style-type: disc;
+}
+
+.editor-content .tiptap ol {
+  list-style-type: decimal;
+}
+
+.editor-content .tiptap li {
+  margin: 0.2em 0;
+}
+
+.editor-content .tiptap li p {
+  margin: 0;
+  text-indent: 0;
+}
+
+.editor-content .tiptap blockquote {
+  border-left: 3px solid var(--punkdom-editor-accent, #303238);
+  padding-left: 1em;
+  margin: 0;
+  color: var(--punkdom-editor-color, #d7dbe2);
+  opacity: 0.78;
+}
+
+.editor-content .tiptap blockquote p {
+  text-indent: 0;
+}
+
+.editor-content .tiptap code {
+  background: color-mix(in srgb, var(--punkdom-editor-accent, #303238) 75%, transparent);
+  border-radius: 3px;
+  padding: 0.15em 0.3em;
+  font-size: 0.9em;
+}
+
+.editor-content .tiptap pre {
+  background: var(--punkdom-code-block-bg);
+  color: var(--punkdom-code-text);
+  border-radius: 6px;
+  padding: 0.75em 1em;
+  margin: 0.5em 0;
+  overflow-x: auto;
+}
+
+.editor-content .tiptap pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.editor-content .tiptap hr {
+  border: none;
+  border-top: 1px solid var(--punkdom-editor-accent, #303238);
+  margin: 0.6em 0;
+}
+
+.editor-content .tiptap strong {
+  font-weight: 700;
+}
+
+.editor-content .tiptap em {
+  font-style: italic;
+}
+
+.editor-content .tiptap a {
+  color: var(--punkdom-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.editor-content .tiptap .punkdom-search-match {
+  border-radius: 3px;
+  background: rgba(250, 204, 21, 0.32);
+  scroll-margin-top: 48px;
+}
+
+.editor-content .tiptap .punkdom-search-current {
+  background: rgba(251, 146, 60, 0.55);
+  outline: 1px solid rgba(251, 191, 36, 0.75);
+}
+
+/* Placeholder 样式 */
+.editor-content .tiptap p.is-editor-empty:first-child::before {
+  color: color-mix(in srgb, var(--punkdom-editor-color, #d7dbe2) 45%, transparent);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* AI 对话区 Markdown 输出样式 */
+.chat-agent-message {
+  font-size: var(--punkdom-ui-sm-font-size);
+  line-height: 1.72;
+}
+
+.chat-agent-message .leading-6,
+.chat-agent-message .leading-7,
+.chat-agent-message .leading-relaxed {
+  line-height: 1.72;
+}
+
+.chat-agent-message p {
+  margin: 0.45em 0;
+}
+
+.chat-agent-message > :first-child {
+  margin-top: 0;
+}
+
+.chat-agent-message > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-agent-message h1,
+.chat-agent-message h2,
+.chat-agent-message h3 {
+  color: var(--punkdom-chat-heading);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.chat-agent-message h1 {
+  font-size: 1.25em;
+  margin: 1em 0 0.45em;
+}
+
+.chat-agent-message h2 {
+  font-size: 1.12em;
+  margin: 0.9em 0 0.4em;
+}
+
+.chat-agent-message h3 {
+  font-size: 1em;
+  margin: 0.75em 0 0.35em;
+}
+
+.chat-agent-message ul,
+.chat-agent-message ol {
+  margin: 0.65em 0;
+  padding-left: 1.35em;
+}
+
+.chat-agent-message ul {
+  list-style: disc;
+}
+
+.chat-agent-message ol {
+  list-style: decimal;
+}
+
+.chat-agent-message li {
+  margin: 0.28em 0;
+}
+
+.chat-agent-message hr {
+  border: none;
+  border-top: 1px solid var(--punkdom-markdown-border);
+  margin: 1em 0;
+}
+
+.chat-agent-message code {
+  border-radius: 4px;
+  background: var(--punkdom-code-bg);
+  padding: 0.12em 0.35em;
+  color: var(--punkdom-code-text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+.chat-agent-message pre {
+  overflow-x: auto;
+  border: 1px solid var(--punkdom-markdown-border);
+  border-radius: 8px;
+  background: var(--punkdom-code-block-bg);
+  padding: 0.75em 1em;
+}
+
+.chat-agent-message pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.chat-agent-message table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0.8em 0;
+  font-size: 0.92em;
+}
+
+.chat-agent-message th,
+.chat-agent-message td {
+  border: 1px solid var(--punkdom-markdown-border);
+  padding: 0.45em 0.65em;
+  text-align: left;
+}
+
+.chat-agent-message th {
+  background: var(--punkdom-table-header-bg);
+  color: var(--punkdom-chat-heading);
+}
+
+.punkdom-dialogue-highlight {
+  color: color-mix(in srgb, currentColor 35%, #ffd166);
+  text-shadow: 0 0 14px color-mix(in srgb, currentColor 22%, transparent);
+}
+
+[data-sonner-toast][data-styled='true'] {
+  padding-right: 2.35rem;
+}
+
+[data-sonner-toast][data-styled='true'] [data-close-button] {
+  top: 50% !important;
+  right: 0.65rem !important;
+  left: auto !important;
+  width: 1.35rem !important;
+  height: 1.35rem !important;
+  transform: translateY(-50%) !important;
+  border-radius: var(--punkdom-radius) !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  color: var(--punkdom-text-faint) !important;
+  opacity: 1 !important;
+}
+
+[data-sonner-toast][data-styled='true'] [data-close-button] svg {
+  opacity: 1 !important;
+}
+
+[data-sonner-toast][data-styled='true'] [data-close-button]:hover {
+  border-color: var(--punkdom-border) !important;
+  background: var(--punkdom-hover) !important;
+  color: var(--punkdom-text) !important;
+}

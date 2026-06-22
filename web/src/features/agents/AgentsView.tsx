@@ -1,0 +1,914 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ElementType, ReactNode } from 'react'
+import { Bot, Brain, Check, ChevronDown, ChevronRight, FolderOpen, Loader2, Save, ScrollText, Wrench, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { InlineErrorNotice } from '@/components/common/inline-error-notice'
+import { Textarea } from '@/components/ui/textarea'
+import { fetchSettings, updateUserSettings, updateWorkspaceSettings } from '@/features/settings/api'
+import type { AgentContextOverride, AgentModelOverride, AgentPromptBlocks, AgentPromptOverride, AgentPromptSource, AgentSkillOverride, AgentToolOverride, LayeredSettings, ModelProfileSettings, Settings, SettingsLayer } from '@/features/settings/types'
+import { settingsForLayer, useAutoSaveSettings } from '@/features/settings/use-auto-save-settings'
+import { getSkills } from '@/lib/api'
+import type { SkillSummary } from '@/lib/api'
+import { AGENTS, FALLBACK_AGENT_TOOL_VALUES, TOOL_ROWS, resolveEffectiveTools, skillAgentFieldMatches, skillAvailableForAgent } from './agent-registry'
+import type { AgentToolDefinition, AgentViewDefinition, ToolKey, VisibleAgentKey } from './agent-registry'
+
+const fieldCls = 'punkdom-field min-h-7 flex-1 rounded-[var(--punkdom-radius)] border px-2.5 py-1.5 outline-none placeholder:text-[var(--punkdom-text-faint)] focus:border-[var(--punkdom-field-focus-border)] focus:bg-[var(--punkdom-surface-3)]'
+const tabCls = 'punkdom-nav-item rounded-[var(--punkdom-radius)] px-2.5 py-1 text-xs'
+
+export function AgentsView({ onClose }: { onClose?: () => void }) {
+  const { t } = useTranslation()
+  const [layered, setLayered] = useState<LayeredSettings | null>(null)
+  const [activeLayer, setActiveLayer] = useState<SettingsLayer>('workspace')
+  const [activeAgent, setActiveAgent] = useState<VisibleAgentKey>('ide')
+  const [draft, setDraft] = useState<Settings>({})
+  const [skills, setSkills] = useState<SkillSummary[]>([])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const data = await fetchSettings()
+      setLayered(data)
+      setDraft(settingsForLayer(data, activeLayer))
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }, [activeLayer])
+
+  useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    const onSettingsUpdated = () => {
+      void load()
+    }
+    window.addEventListener('punkdom:settings-updated', onSettingsUpdated)
+    return () => window.removeEventListener('punkdom:settings-updated', onSettingsUpdated)
+  }, [load])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadSkills = () => {
+      getSkills()
+        .then((snapshot) => {
+          if (!cancelled) setSkills(snapshot.skills.filter((skill) => skill.active))
+        })
+        .catch((error) => {
+          if (!cancelled) console.warn('[agents] load skills failed', error)
+        })
+    }
+    loadSkills()
+    window.addEventListener('punkdom:skills-updated', loadSkills)
+    return () => {
+      cancelled = true
+      window.removeEventListener('punkdom:skills-updated', loadSkills)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!layered) return
+    setDraft(settingsForLayer(layered, activeLayer))
+  }, [activeLayer])
+
+  const effective = layered?.effective ?? {}
+  const selected = AGENTS.find((agent) => agent.key === activeAgent) ?? AGENTS[0]
+  const profileOptions = useMemo(() => buildProfileOptions(draft, effective, t), [draft, effective, t])
+  const modelValue = draft.agent_models?.[activeAgent] ?? {}
+  const inheritedModel = mergeAgentModelOverride(effective.agent_models?.default ?? {}, effective.agent_models?.[activeAgent] ?? {})
+  const promptValue = draft.agent_prompts?.[activeAgent] ?? {}
+  const inheritedPrompt = mergeAgentPromptOverride(effective.agent_prompts?.default ?? {}, effective.agent_prompts?.[activeAgent] ?? {})
+  const builtinPrompt = layered?.builtin_agent_prompts?.[activeAgent]?.system_prompt ?? ''
+  const builtinBlocks = layered?.builtin_agent_prompt_blocks?.[activeAgent]
+  const promptSources = layered?.builtin_agent_prompt_sources?.[activeAgent]?.sources
+  const toolValue = draft.agent_tools?.[activeAgent] ?? {}
+  const inheritedTools = effective.agent_tools?.[activeAgent] ?? FALLBACK_AGENT_TOOL_VALUES[activeAgent]
+  const effectiveTools = resolveEffectiveTools(effective.agent_tools?.default ?? {}, inheritedTools)
+  const skillValue = draft.agent_skills?.[activeAgent] ?? {}
+  const contextValue = draft.agent_context?.[activeAgent] ?? {}
+  const inheritedContext = mergeAgentContextOverride(effective.agent_context?.default ?? {}, effective.agent_context?.[activeAgent] ?? {})
+
+  const saveDraft = useCallback(async (settings: Settings) => {
+    const updater = activeLayer === 'user' ? updateUserSettings : updateWorkspaceSettings
+    return updater(settings)
+  }, [activeLayer])
+
+  const applySavedSettings = useCallback((next: LayeredSettings) => {
+    setLayered(next)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('punkdom:settings-updated'))
+    }
+  }, [])
+
+  const onSave = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const next = await saveDraft(draft)
+      applySavedSettings(next)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const setAgentModel = (patch: Partial<AgentModelOverride>) => {
+    setDraft((current) => ({
+      ...current,
+      agent_models: {
+        ...(current.agent_models ?? {}),
+        [activeAgent]: { ...(current.agent_models?.[activeAgent] ?? {}), ...patch },
+      },
+    }))
+  }
+
+  const setAgentTool = (key: ToolKey, value: boolean | null) => {
+    setDraft((current) => ({
+      ...current,
+      agent_tools: {
+        ...(current.agent_tools ?? {}),
+        [activeAgent]: { ...(current.agent_tools?.[activeAgent] ?? {}), [key]: value },
+      },
+    }))
+  }
+
+  const setAgentPrompt = (patch: Partial<AgentPromptOverride>) => {
+    setDraft((current) => ({
+      ...current,
+      agent_prompts: {
+        ...(current.agent_prompts ?? {}),
+        [activeAgent]: { ...(current.agent_prompts?.[activeAgent] ?? {}), ...patch },
+      },
+    }))
+  }
+
+  const setAgentSkill = (name: string, value: boolean | null) => {
+    setDraft((current) => {
+      const nextAgentSkills = { ...(current.agent_skills ?? {}) }
+      const nextOverrides: AgentSkillOverride = { ...(nextAgentSkills[activeAgent] ?? {}) }
+      if (value === null) {
+        delete nextOverrides[name]
+      } else {
+        nextOverrides[name] = value
+      }
+      nextAgentSkills[activeAgent] = nextOverrides
+      return { ...current, agent_skills: nextAgentSkills }
+    })
+  }
+
+  const setAgentContext = (patch: Partial<AgentContextOverride>) => {
+    setDraft((current) => ({
+      ...current,
+      agent_context: {
+        ...(current.agent_context ?? {}),
+        [activeAgent]: { ...(current.agent_context?.[activeAgent] ?? {}), ...patch },
+      },
+    }))
+  }
+
+  useAutoSaveSettings({
+    draft,
+    saved: layered ? settingsForLayer(layered, activeLayer) : {},
+    ready: Boolean(layered),
+    save: saveDraft,
+    onSavingChange: setSaving,
+    onSaved: applySavedSettings,
+    onError: setError,
+  })
+
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col bg-[var(--punkdom-bg)] text-[var(--punkdom-text)]">
+      <div className="punkdom-topbar flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-1.5 text-xs">
+        <Bot className="h-3.5 w-3.5 text-[var(--punkdom-text-muted)]" />
+        <span className="font-medium">Agents</span>
+        <div className="ml-3 flex gap-1 border-l border-[var(--punkdom-border)] pl-3">
+          {(['workspace', 'user'] as SettingsLayer[]).map((layer) => (
+            <button
+              key={layer}
+              type="button"
+              onClick={() => setActiveLayer(layer)}
+              className={`${tabCls} ${activeLayer === layer ? 'is-active' : 'bg-[var(--punkdom-surface-2)] text-[var(--punkdom-text-muted)]'}`}
+            >
+              {layer === 'workspace' ? t('agents.layer.workspace') : t('agents.layer.user')}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving}
+          className="punkdom-nav-item ml-auto inline-flex items-center gap-1.5 rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-active)] px-3 py-1 text-[var(--punkdom-text)] disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+          {t('common.save')}
+        </button>
+        {onClose && (
+          <button type="button" onClick={onClose} className="punkdom-nav-item rounded p-1" aria-label={t('agents.close')} title={t('agents.close')}>
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {error && <InlineErrorNotice className="mx-3 mt-2" message={error} title={t('agents.saveError')} />}
+
+      <div className="grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)] text-xs">
+        <aside className="min-h-0 overflow-y-auto border-r border-[var(--punkdom-border)] bg-[var(--punkdom-surface-2)] p-3">
+          <AgentList active={activeAgent} onSelect={setActiveAgent} />
+        </aside>
+
+        <main className="min-h-0 overflow-y-auto">
+          <div className="mx-auto flex max-w-5xl flex-col gap-5 px-6 py-5">
+            <AgentHeader agent={selected} />
+            <AgentModelSection
+              value={modelValue}
+              inherited={inheritedModel}
+              profiles={profileOptions}
+              onChange={setAgentModel}
+            />
+            <AgentPromptSection
+              value={promptValue}
+              inherited={inheritedPrompt}
+              builtin={builtinPrompt}
+              blocks={builtinBlocks}
+              sources={promptSources}
+              onChange={setAgentPrompt}
+            />
+            <AgentRuntimeContextSection
+              agent={activeAgent}
+              value={contextValue}
+              inherited={inheritedContext}
+              onChange={setAgentContext}
+            />
+            {selected.capabilityMode === 'tools' ? (
+              <>
+                <AgentToolSection
+                  agent={activeAgent}
+                  value={toolValue}
+                  effective={effectiveTools}
+                  onChange={setAgentTool}
+                />
+                {effectiveTools.skills && (
+                  <AgentSkillSection
+                    agent={activeAgent}
+                    skills={skills}
+                    value={skillValue}
+                    effective={effective.agent_skills}
+                    onChange={setAgentSkill}
+                  />
+                )}
+              </>
+            ) : selected.capabilityMode === 'built_in' ? (
+              <AgentBuiltInCapabilitySection agent={selected.key} />
+            ) : (
+              <AgentModelOnlySection />
+            )}
+            <AgentContextSection agent={selected.key} effective={effective} />
+          </div>
+        </main>
+      </div>
+    </div>
+  )
+}
+
+function AgentList({ active, onSelect }: { active: VisibleAgentKey; onSelect: (agent: VisibleAgentKey) => void }) {
+  const { t } = useTranslation()
+  const groups = AGENTS.reduce<Array<{ group: string; agents: typeof AGENTS }>>((acc, agent) => {
+    const last = acc[acc.length - 1]
+    if (last?.group === agent.groupKey) last.agents.push(agent)
+    else acc.push({ group: agent.groupKey, agents: [agent] })
+    return acc
+  }, [])
+
+  return (
+    <nav className="space-y-4">
+      {groups.map((group) => (
+        <div key={group.group}>
+          <div className="mb-1.5 px-2 text-[11px] font-medium text-[var(--punkdom-text-faint)]">{t(group.group)}</div>
+          <div className="space-y-1">
+            {group.agents.map((agent) => {
+              const Icon = agent.icon
+              return (
+                <button
+                  key={agent.key}
+                  type="button"
+                  onClick={() => onSelect(agent.key)}
+                  className={`punkdom-nav-item flex w-full items-center gap-2 rounded-[var(--punkdom-radius)] px-2.5 py-2 text-left ${active === agent.key ? 'is-active' : ''}`}
+                >
+                  <Icon className="h-4 w-4 shrink-0 text-[var(--punkdom-text-muted)]" />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-[var(--punkdom-text)]">{t(agent.titleKey)}</span>
+                    <span className="block truncate text-[11px] text-[var(--punkdom-text-faint)]">{t(agent.subtitleKey)}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </nav>
+  )
+}
+
+function AgentHeader({ agent }: { agent: AgentViewDefinition }) {
+  const { t } = useTranslation()
+  const Icon = agent.icon
+  return (
+    <section className="border-b border-[var(--punkdom-border)] pb-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface-2)]">
+          <Icon className="h-4 w-4 text-[var(--punkdom-text-muted)]" />
+        </div>
+        <div className="min-w-0">
+          <h1 className="truncate text-sm font-semibold">{t(agent.titleKey)}</h1>
+          <div className="mt-1 text-[11px] text-[var(--punkdom-text-faint)]">{t(agent.subtitleKey)}</div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function AgentModelSection({ value, inherited, profiles, onChange }: {
+  value: AgentModelOverride
+  inherited: AgentModelOverride
+  profiles: Array<{ id: string; label: string }>
+  onChange: (patch: Partial<AgentModelOverride>) => void
+}) {
+  const { t } = useTranslation()
+  const hasProfile = hasTextOverride(value.profile_id)
+  const hasTemperature = value.temperature !== undefined && value.temperature !== null
+  const hasThinking = value.enable_thinking !== undefined && value.enable_thinking !== null
+  const hasEffort = hasTextOverride(value.reasoning_effort)
+  const effectiveProfile = hasProfile ? value.profile_id || 'default' : inherited.profile_id || 'default'
+  const effectiveTemperature = hasTemperature ? value.temperature : inherited.temperature
+  const effectiveThinking = hasThinking ? value.enable_thinking : inherited.enable_thinking
+  const effectiveEffort = hasEffort ? value.reasoning_effort || '' : inherited.reasoning_effort || ''
+
+  return (
+    <section className="space-y-3 border-b border-[var(--punkdom-border)] pb-5">
+      <SectionTitle icon={Brain} title={t('agents.section.model')} />
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field label={t('agents.field.modelProfile')} inherited={!hasProfile} onReset={hasProfile ? () => onChange({ profile_id: '' }) : undefined}>
+          <select value={effectiveProfile} onChange={(e) => onChange({ profile_id: e.target.value })} className={fieldCls}>
+            {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.label}</option>)}
+          </select>
+        </Field>
+        <Field label="Temperature" inherited={!hasTemperature} onReset={hasTemperature ? () => onChange({ temperature: null }) : undefined}>
+          <input
+            type="number"
+            step={0.1}
+            min={0}
+            max={2}
+            value={effectiveTemperature ?? ''}
+            placeholder={t('agents.option.platformDefault')}
+            onChange={(e) => onChange({ temperature: e.target.value === '' ? null : Number(e.target.value) })}
+            className={fieldCls}
+          />
+        </Field>
+        <Field label={t('agents.field.thinking')} inherited={!hasThinking} onReset={hasThinking ? () => onChange({ enable_thinking: null }) : undefined}>
+          <select
+            value={effectiveThinking === null || effectiveThinking === undefined ? '' : String(effectiveThinking)}
+            onChange={(e) => onChange({ enable_thinking: e.target.value === '' ? null : e.target.value === 'true' })}
+            className={fieldCls}
+          >
+            <option value="">{t('agents.option.noSend')}</option>
+            <option value="true">{t('agents.option.on')}</option>
+            <option value="false">{t('agents.option.off')}</option>
+          </select>
+        </Field>
+        <Field label={t('agents.field.reasoningEffort')} inherited={!hasEffort} onReset={hasEffort ? () => onChange({ reasoning_effort: '' }) : undefined}>
+          <select value={effectiveEffort} onChange={(e) => onChange({ reasoning_effort: e.target.value })} className={fieldCls}>
+            <option value="">{t('agents.option.noSend')}</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+        </Field>
+      </div>
+    </section>
+  )
+}
+
+function AgentPromptSection({ value, inherited, builtin, blocks, sources, onChange }: {
+  value: AgentPromptOverride
+  inherited: AgentPromptOverride
+  builtin: string
+  blocks?: AgentPromptBlocks
+  sources?: AgentPromptSource[]
+  onChange: (patch: Partial<AgentPromptOverride>) => void
+}) {
+  const { t } = useTranslation()
+  const promptSources = sources?.length ? sources : fallbackPromptSources(blocks, builtin)
+  return (
+    <section className="space-y-3 border-b border-[var(--punkdom-border)] pb-5">
+      <SectionTitle icon={ScrollText} title={t('agents.section.systemPrompt')} />
+      <div className="space-y-2">
+        {promptSources.map((source) => (
+          <PromptSourceBlock
+            key={`${source.id}:${source.field ?? 'readonly'}`}
+            source={source}
+            value={value}
+            inherited={inherited}
+            onChange={onChange}
+          />
+        ))}
+      </div>
+      <div className="rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface-2)] px-3 py-2 text-[11px] leading-5 text-[var(--punkdom-text-faint)]">
+        {t('agents.prompt.builtinNote')}
+      </div>
+    </section>
+  )
+}
+
+function PromptSourceBlock({ source, value, inherited, onChange }: {
+  source: AgentPromptSource
+  value: AgentPromptOverride
+  inherited: AgentPromptOverride
+  onChange: (patch: Partial<AgentPromptOverride>) => void
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const editableField = source.editable ? source.field : undefined
+  const hasOverride = editableField ? hasPromptOverride(value[editableField]) : false
+  const inheritedText = editableField ? inherited[editableField] : undefined
+  const defaultContent = source.content ?? ''
+  const effectiveContent = editableField
+    ? (hasOverride ? value[editableField] ?? '' : (hasPromptOverride(inheritedText) ? inheritedText ?? '' : defaultContent))
+    : defaultContent
+  const title = promptSourceTitle(t, source)
+  const badge = source.editable ? t('agents.prompt.badge.editable') : t('agents.prompt.badge.readonly')
+  const content = effectiveContent.trim()
+
+  return (
+    <div className="rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface-2)]">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        aria-expanded={open}
+      >
+        {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--punkdom-text-muted)]" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--punkdom-text-muted)]" />}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[11px] font-medium text-[var(--punkdom-text)]">{title}</span>
+          <span className="block truncate text-[10px] text-[var(--punkdom-text-faint)]">{source.source}</span>
+        </span>
+        <span className="rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] px-1.5 py-0.5 text-[10px] text-[var(--punkdom-text-faint)]">{badge}</span>
+        {editableField && hasOverride && <span className="rounded-[var(--punkdom-radius)] bg-[var(--punkdom-active)] px-1.5 py-0.5 text-[10px] text-[var(--punkdom-text-muted)]">{t('agents.badge.overridden')}</span>}
+      </button>
+      {open && (
+        <div className="border-t border-[var(--punkdom-border)] p-3">
+          {editableField ? (
+            <Field label={title} inherited={!hasOverride} onReset={hasOverride ? () => onChange({ [editableField]: '' }) : undefined}>
+              <Textarea
+                autoResize
+                value={effectiveContent}
+                aria-label={title}
+                placeholder={t('agents.prompt.placeholder')}
+                onChange={(e) => onChange({ [editableField]: e.target.value })}
+                className={`${fieldCls} min-h-36 resize-y leading-5 shadow-none focus-visible:ring-0`}
+              />
+            </Field>
+          ) : content ? (
+            <pre className="max-h-56 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-[var(--punkdom-text-faint)]">{effectiveContent}</pre>
+          ) : (
+            <div className="text-[11px] text-[var(--punkdom-text-faint)]">{t('agents.prompt.empty')}</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function fallbackPromptSources(blocks?: AgentPromptBlocks, builtin?: string): AgentPromptSource[] {
+  return [
+    blocks?.runtime_contract ? {
+      id: 'runtime_contract',
+      title: 'Runtime Contract',
+      source: 'Punkdom runtime',
+      content: blocks.runtime_contract,
+    } : null,
+    blocks?.output_protocol ? {
+      id: 'output_protocol',
+      title: 'Output Format',
+      source: 'Punkdom runtime',
+      content: blocks.output_protocol,
+    } : null,
+    {
+      id: 'flow',
+      title: 'Flow Rules',
+      source: 'Punkdom built-in',
+      content: blocks?.editable_system_prompt || builtin || '',
+      editable: true,
+      field: 'flow_prompt' as const,
+    },
+    {
+      id: 'custom',
+      title: 'Custom Rules',
+      source: 'user/workspace config',
+      content: '',
+      editable: true,
+      field: 'system_prompt' as const,
+    },
+  ].filter(Boolean) as AgentPromptSource[]
+}
+
+function AgentRuntimeContextSection({ agent, value, inherited, onChange }: {
+  agent: VisibleAgentKey
+  value: AgentContextOverride
+  inherited: AgentContextOverride
+  onChange: (patch: Partial<AgentContextOverride>) => void
+}) {
+  const { t } = useTranslation()
+  const hasRecentTurns = value.recent_turns !== undefined && value.recent_turns !== null
+  const hasCompactionEnabled = value.compaction_enabled !== undefined && value.compaction_enabled !== null
+  const hasCompactionThreshold = value.compaction_threshold !== undefined && value.compaction_threshold !== null
+  const hasCompactionRecentTurns = value.compaction_recent_turns !== undefined && value.compaction_recent_turns !== null
+  const hasCompactionTargetMin = value.compaction_target_min_ratio !== undefined && value.compaction_target_min_ratio !== null
+  const hasCompactionTargetMax = value.compaction_target_max_ratio !== undefined && value.compaction_target_max_ratio !== null
+  const effectiveRecentTurns = hasRecentTurns ? value.recent_turns : inherited.recent_turns ?? 30
+  const effectiveCompactionEnabled = hasCompactionEnabled ? value.compaction_enabled : inherited.compaction_enabled ?? true
+  const effectiveCompactionThreshold = hasCompactionThreshold ? value.compaction_threshold : inherited.compaction_threshold ?? 0.9
+  const effectiveCompactionRecentTurns = hasCompactionRecentTurns ? value.compaction_recent_turns : inherited.compaction_recent_turns ?? 8
+  const effectiveCompactionTargetMin = hasCompactionTargetMin ? value.compaction_target_min_ratio : inherited.compaction_target_min_ratio ?? 0.05
+  const effectiveCompactionTargetMax = hasCompactionTargetMax ? value.compaction_target_max_ratio : inherited.compaction_target_max_ratio ?? 0.2
+  const isCompactionAgent = agent === 'context_compaction'
+  return (
+    <section className="space-y-3 border-b border-[var(--punkdom-border)] pb-5">
+      <SectionTitle icon={FolderOpen} title={t('agents.section.runtimeContext')} />
+      <div className="grid gap-3 md:grid-cols-2">
+        {!isCompactionAgent && (
+          <>
+            <Field label={t('agents.field.recentTurns')} inherited={!hasRecentTurns} onReset={hasRecentTurns ? () => onChange({ recent_turns: null }) : undefined}>
+              <input
+                type="number"
+                min={1}
+                max={30}
+                step={1}
+                value={effectiveRecentTurns ?? 30}
+                onChange={(e) => onChange({ recent_turns: e.target.value === '' ? null : Number(e.target.value) })}
+                className={fieldCls}
+              />
+            </Field>
+            <Field label={t('agents.field.compactionEnabled')} inherited={!hasCompactionEnabled} onReset={hasCompactionEnabled ? () => onChange({ compaction_enabled: null }) : undefined}>
+              <select
+                value={String(effectiveCompactionEnabled)}
+                onChange={(e) => onChange({ compaction_enabled: e.target.value === 'true' })}
+                className={fieldCls}
+              >
+                <option value="true">{t('agents.option.on')}</option>
+                <option value="false">{t('agents.option.off')}</option>
+              </select>
+            </Field>
+            <Field label={t('agents.field.compactionThreshold')} inherited={!hasCompactionThreshold} onReset={hasCompactionThreshold ? () => onChange({ compaction_threshold: null }) : undefined}>
+              <input
+                type="number"
+                min={50}
+                max={98}
+                step={1}
+                value={Math.round((effectiveCompactionThreshold ?? 0.9) * 100)}
+                onChange={(e) => onChange({ compaction_threshold: e.target.value === '' ? null : Number(e.target.value) / 100 })}
+                className={fieldCls}
+              />
+            </Field>
+          </>
+        )}
+        {isCompactionAgent && (
+          <>
+            <Field label={t('agents.field.compactionRecentTurns')} inherited={!hasCompactionRecentTurns} onReset={hasCompactionRecentTurns ? () => onChange({ compaction_recent_turns: null }) : undefined}>
+              <input
+                type="number"
+                min={1}
+                max={30}
+                step={1}
+                value={effectiveCompactionRecentTurns ?? 8}
+                onChange={(e) => onChange({ compaction_recent_turns: e.target.value === '' ? null : Number(e.target.value) })}
+                className={fieldCls}
+              />
+            </Field>
+            <Field label={t('agents.field.compactionTargetMin')} inherited={!hasCompactionTargetMin} onReset={hasCompactionTargetMin ? () => onChange({ compaction_target_min_ratio: null }) : undefined}>
+              <input
+                type="number"
+                min={1}
+                max={80}
+                step={1}
+                value={Math.round((effectiveCompactionTargetMin ?? 0.05) * 100)}
+                onChange={(e) => onChange({ compaction_target_min_ratio: e.target.value === '' ? null : Number(e.target.value) / 100 })}
+                className={fieldCls}
+              />
+            </Field>
+            <Field label={t('agents.field.compactionTargetMax')} inherited={!hasCompactionTargetMax} onReset={hasCompactionTargetMax ? () => onChange({ compaction_target_max_ratio: null }) : undefined}>
+              <input
+                type="number"
+                min={1}
+                max={80}
+                step={1}
+                value={Math.round((effectiveCompactionTargetMax ?? 0.2) * 100)}
+                onChange={(e) => onChange({ compaction_target_max_ratio: e.target.value === '' ? null : Number(e.target.value) / 100 })}
+                className={fieldCls}
+              />
+            </Field>
+          </>
+        )}
+      </div>
+      <div className="rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface-2)] px-3 py-2 text-[11px] leading-5 text-[var(--punkdom-text-faint)]">
+        {isCompactionAgent ? t('agents.context.compactionTargetNote') : t('agents.context.recentTurnsNote')}
+      </div>
+    </section>
+  )
+}
+
+function promptSourceTitle(t: ReturnType<typeof useTranslation>['t'], source: AgentPromptSource) {
+  const key = `agents.prompt.source.${source.id}`
+  const translated = t(key)
+  return translated === key ? source.title : translated
+}
+
+function AgentToolSection({ agent, value, effective, onChange }: {
+  agent: VisibleAgentKey
+  value: AgentToolOverride
+  effective: Required<AgentToolOverride>
+  onChange: (key: ToolKey, value: boolean | null) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <section className="space-y-3 border-b border-[var(--punkdom-border)] pb-5">
+      <SectionTitle icon={Wrench} title={t('agents.section.tools')} />
+      <div className="grid gap-2 lg:grid-cols-2">
+        {TOOL_ROWS.map((tool) => {
+          const Icon = tool.icon
+          const explicit = value[tool.key]
+          const inherited = explicit === undefined || explicit === null
+          const current = inherited ? effective[tool.key] : explicit
+          return (
+            <div key={tool.key} className="flex min-h-16 items-center gap-3 rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface)] px-3 py-2">
+              <Icon className="h-4 w-4 shrink-0 text-[var(--punkdom-text-muted)]" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">{t(tool.titleKey)}</div>
+                <div className="mt-0.5 truncate text-[11px] text-[var(--punkdom-text-faint)]">{t(toolSubtitleKey(tool, agent))}</div>
+              </div>
+              <select
+                value={String(current)}
+                onChange={(e) => onChange(tool.key, e.target.value === '' ? null : e.target.value === 'true')}
+                className={`${fieldCls} max-w-32 shrink-0`}
+              >
+                <option value="true">{t('agents.option.on')}</option>
+                <option value="false">{t('agents.option.off')}</option>
+              </select>
+              <InheritanceBadge inherited={inherited} onReset={!inherited ? () => onChange(tool.key, null) : undefined} />
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+function toolSubtitleKey(tool: AgentToolDefinition, agent: VisibleAgentKey) {
+  if (agent === 'interactive_story' && tool.key === 'lore_read') {
+    return 'agents.tool.loreRead.interactiveSubtitle'
+  }
+  return tool.subtitleKey
+}
+
+function AgentSkillSection({ agent, skills, value, effective, onChange }: {
+  agent: VisibleAgentKey
+  skills: SkillSummary[]
+  value: AgentSkillOverride
+  effective: Settings['agent_skills']
+  onChange: (name: string, value: boolean | null) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <section className="space-y-3 border-b border-[var(--punkdom-border)] pb-5">
+      <SectionTitle icon={FolderOpen} title={t('agents.section.skills')} />
+      {skills.length === 0 ? (
+        <div className="rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface)] px-3 py-3 text-[11px] text-[var(--punkdom-text-faint)]">
+          {t('agents.skills.empty')}
+        </div>
+      ) : (
+        <div className="grid gap-2 lg:grid-cols-2">
+          {skills.map((skill) => {
+            const explicit = value[skill.name]
+            const inherited = explicit === undefined
+            const current = inherited ? skillAvailableForAgent(skill, agent, effective) : explicit
+            const defaultAvailable = skillAgentFieldMatches(skill.agent, agent)
+            return (
+              <div key={`${skill.scope}:${skill.name}`} className="flex min-h-16 items-center gap-3 rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface)] px-3 py-2">
+                <FolderOpen className="h-4 w-4 shrink-0 text-[var(--punkdom-text-muted)]" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-mono font-medium">/{skill.name}</span>
+                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${current ? 'bg-[var(--punkdom-success-bg)] text-[var(--punkdom-success)]' : 'bg-[var(--punkdom-danger-bg)] text-[var(--punkdom-danger)]'}`}>
+                      {current ? t('agents.skills.available') : t('agents.skills.unavailable')}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 truncate text-[11px] text-[var(--punkdom-text-faint)]" title={skill.description}>{skill.description}</div>
+                  <div className="mt-0.5 truncate text-[10px] text-[var(--punkdom-text-faint)]">
+                    {defaultAvailable ? t('agents.skills.defaultAvailable') : t('agents.skills.defaultUnavailable')}
+                    {skill.agent ? ` · ${skill.agent}` : ''}
+                  </div>
+                </div>
+                <select
+                  value={inherited ? '' : String(explicit)}
+                  onChange={(event) => onChange(skill.name, event.target.value === '' ? null : event.target.value === 'true')}
+                  className={`${fieldCls} max-w-32 shrink-0`}
+                >
+                  <option value="">{t('agents.option.inherit')}</option>
+                  <option value="true">{t('agents.option.on')}</option>
+                  <option value="false">{t('agents.option.off')}</option>
+                </select>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <div className="rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface-2)] px-3 py-2 text-[11px] leading-5 text-[var(--punkdom-text-faint)]">
+        {t('agents.skills.note')}
+      </div>
+    </section>
+  )
+}
+
+function AgentBuiltInCapabilitySection({ agent }: { agent: VisibleAgentKey }) {
+  const { t } = useTranslation()
+  const rows = builtInCapabilityRows(agent, t)
+  return (
+    <section className="space-y-3 border-b border-[var(--punkdom-border)] pb-5">
+      <SectionTitle icon={Wrench} title={t('agents.section.builtIn')} />
+      <div className="grid gap-2 md:grid-cols-2">
+        {rows.map((row) => (
+          <div key={row.title} className="rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface)] px-3 py-2">
+            <div className="font-medium text-[var(--punkdom-text)]">{row.title}</div>
+            <div className="mt-1 text-[11px] leading-5 text-[var(--punkdom-text-faint)]">{row.value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface-2)] px-3 py-2 text-[11px] leading-5 text-[var(--punkdom-text-faint)]">
+        {t('agents.builtIn.note')}
+      </div>
+    </section>
+  )
+}
+
+function AgentModelOnlySection() {
+  const { t } = useTranslation()
+  return (
+    <section className="space-y-3 border-b border-[var(--punkdom-border)] pb-5">
+      <SectionTitle icon={Wrench} title={t('agents.section.tools')} />
+      <div className="rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface)] px-3 py-2 text-[11px] leading-5 text-[var(--punkdom-text-faint)]">
+        {t('agents.modelOnly.note')}
+      </div>
+    </section>
+  )
+}
+
+function AgentContextSection({ agent, effective }: { agent: VisibleAgentKey; effective: Settings }) {
+  const { t } = useTranslation()
+  const rows = contextRowsFor(agent, effective, t)
+  return (
+    <section className="space-y-3 pb-5">
+      <SectionTitle icon={FolderOpen} title={t('agents.section.context')} />
+      <div className="grid gap-2 md:grid-cols-3">
+        {rows.map((row) => (
+          <div key={row.title} className="rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface)] px-3 py-2">
+            <div className="flex items-center gap-1.5 text-[var(--punkdom-text)]">
+              <Check className="h-3.5 w-3.5 text-[var(--punkdom-accent-green)]" />
+              <span className="font-medium">{row.title}</span>
+            </div>
+            <div className="mt-1 truncate text-[11px] text-[var(--punkdom-text-faint)]">{row.value}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function SectionTitle({ icon: Icon, title }: { icon: ElementType; title: string }) {
+  return (
+    <div className="flex items-center gap-2 text-xs font-medium">
+      <Icon className="h-3.5 w-3.5 text-[var(--punkdom-text-muted)]" />
+      {title}
+    </div>
+  )
+}
+
+function Field({ label, inherited, onReset, children }: { label: string; inherited?: boolean; onReset?: () => void; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[var(--punkdom-text-muted)]">{label}</span>
+      <span className="flex items-center gap-2">
+        {children}
+        {inherited !== undefined && <InheritanceBadge inherited={inherited} onReset={onReset} />}
+      </span>
+    </div>
+  )
+}
+
+function InheritanceBadge({ inherited, onReset }: { inherited: boolean; onReset?: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <span className={`inline-flex h-7 shrink-0 items-center rounded-[var(--punkdom-radius)] border px-2 text-[11px] ${inherited ? 'border-[var(--punkdom-border)] bg-[var(--punkdom-surface-2)] text-[var(--punkdom-text-faint)]' : 'border-[var(--punkdom-border)] bg-[var(--punkdom-active)] text-[var(--punkdom-text-muted)]'}`}>
+      {inherited ? t('agents.badge.inherited') : (
+        <button type="button" onClick={onReset} className="text-[var(--punkdom-text-muted)] hover:text-[var(--punkdom-text)]">
+          {t('agents.badge.overridden')}
+        </button>
+      )}
+    </span>
+  )
+}
+
+function buildProfileOptions(draft: Settings, effective: Settings, t: (key: string, options?: Record<string, unknown>) => string): Array<{ id: string; label: string }> {
+  const profiles = new Map<string, string>()
+  const add = (profile?: ModelProfileSettings) => {
+    const id = profile?.id?.trim()
+    if (!id) return
+    profiles.set(id, profile?.name || profile?.openai_model || id)
+  }
+  profiles.set('default', effective.openai_model || t('agents.option.defaultModel'))
+  ;(effective.model_profiles ?? []).forEach(add)
+  ;(draft.model_profiles ?? []).forEach(add)
+  return Array.from(profiles.entries()).map(([id, label]) => ({
+    id,
+    label: id === 'default' ? t('agents.option.defaultProfile', { label }) : t('agents.option.profile', { id, label }),
+  }))
+}
+
+function contextRowsFor(agent: VisibleAgentKey, effective: Settings, t: (key: string, options?: Record<string, unknown>) => string) {
+  const context = mergeAgentContextOverride(effective.agent_context?.default ?? {}, effective.agent_context?.[agent] ?? {})
+  const compactionContext = mergeAgentContextOverride(effective.agent_context?.default ?? {}, effective.agent_context?.context_compaction ?? {})
+  const recentTurns = context.recent_turns ?? 30
+  const compactionTurns = compactionContext.compaction_recent_turns ?? 8
+  const threshold = Math.round((context.compaction_threshold ?? 0.9) * 100)
+  const targetMin = Math.round((compactionContext.compaction_target_min_ratio ?? 0.05) * 100)
+  const targetMax = Math.round((compactionContext.compaction_target_max_ratio ?? 0.2) * 100)
+  if (agent === 'ide') {
+    return [
+      { title: t('agents.context.currentBook'), value: 'workspace' },
+      { title: t('agents.context.defaultTeller'), value: effective.ide_story_teller_id || 'classic' },
+      { title: t('agents.context.sessionContext'), value: t('agents.context.compactionValue', { threshold, count: compactionTurns, fallback: recentTurns }) },
+    ]
+  }
+  if (agent === 'interactive_story') {
+    return [
+      { title: t('agents.context.storyState'), value: 'story jsonl' },
+      { title: t('agents.context.teller'), value: t('agents.context.currentStoryTeller') },
+      { title: t('agents.context.sessionContext'), value: t('agents.context.compactionValue', { threshold, count: compactionTurns, fallback: recentTurns }) },
+    ]
+  }
+  if (agent === 'context_compaction') {
+    return [
+      { title: t('agents.context.inputSource'), value: t('agents.context.compactionInputValue') },
+      { title: t('agents.context.outputShape'), value: t('agents.context.compactionOutputValue') },
+      { title: t('agents.context.historyBoundary'), value: t('agents.context.compactionTargetValue', { min: targetMin, max: targetMax, count: compactionTurns }) },
+    ]
+  }
+  return [
+    { title: t('agents.context.inputSource'), value: t('agents.context.inputSourceValue') },
+    { title: t('agents.context.outputShape'), value: t('agents.context.outputShapeValue') },
+    { title: t('agents.context.historyBoundary'), value: t('agents.context.compactionValue', { threshold, count: compactionTurns, fallback: recentTurns }) },
+  ]
+}
+
+function builtInCapabilityRows(agent: VisibleAgentKey, t: (key: string) => string): Array<{ title: string; value: string }> {
+  void agent
+  void t
+  return []
+}
+
+function hasTextOverride(value?: string) {
+  return value !== undefined && value !== ''
+}
+
+function hasPromptOverride(value?: string) {
+  return value !== undefined && value.trim() !== ''
+}
+
+function mergeAgentModelOverride(parent: AgentModelOverride, child: AgentModelOverride): AgentModelOverride {
+  return {
+    profile_id: child.profile_id || parent.profile_id,
+    temperature: child.temperature ?? parent.temperature,
+    enable_thinking: child.enable_thinking ?? parent.enable_thinking,
+    reasoning_effort: child.reasoning_effort || parent.reasoning_effort,
+  }
+}
+
+function mergeAgentPromptOverride(parent: AgentPromptOverride, child: AgentPromptOverride): AgentPromptOverride {
+  return {
+    flow_prompt: hasPromptOverride(child.flow_prompt) ? child.flow_prompt : parent.flow_prompt,
+    system_prompt: hasPromptOverride(child.system_prompt) ? child.system_prompt : parent.system_prompt,
+  }
+}
+
+function mergeAgentContextOverride(parent: AgentContextOverride, child: AgentContextOverride): AgentContextOverride {
+  const recentTurns = child.recent_turns ?? parent.recent_turns ?? 30
+  const compactionThreshold = child.compaction_threshold ?? parent.compaction_threshold ?? 0.9
+  const compactionRecentTurns = child.compaction_recent_turns ?? parent.compaction_recent_turns ?? 8
+  const compactionTargetMin = child.compaction_target_min_ratio ?? parent.compaction_target_min_ratio ?? 0.05
+  const compactionTargetMax = child.compaction_target_max_ratio ?? parent.compaction_target_max_ratio ?? 0.2
+  return {
+    recent_turns: Math.max(1, Math.min(30, recentTurns)),
+    compaction_enabled: child.compaction_enabled ?? parent.compaction_enabled ?? true,
+    compaction_threshold: Math.max(0.5, Math.min(0.98, compactionThreshold)),
+    compaction_recent_turns: Math.max(1, Math.min(30, compactionRecentTurns)),
+    compaction_target_min_ratio: Math.max(0.01, Math.min(0.8, compactionTargetMin)),
+    compaction_target_max_ratio: Math.max(0.01, Math.min(0.8, Math.max(compactionTargetMin, compactionTargetMax))),
+  }
+}

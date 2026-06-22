@@ -1,0 +1,175 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
+import { MessageList } from './MessageList'
+import { SessionManager } from './SessionManager'
+import type { SessionSummary } from '@/lib/api'
+
+const sessions: SessionSummary[] = [
+  { id: 'session-a', title: '设定讨论', active: true, message_count: 2, created_at: '', updated_at: '' },
+  { id: 'session-b', title: '正文续写', active: false, message_count: 1, created_at: '', updated_at: '' },
+]
+
+describe('SessionManager', () => {
+  it('从列表选择会话时触发切换回调', async () => {
+    const user = userEvent.setup()
+    const handleSwitch = vi.fn()
+
+    render(
+      <SessionManager
+        sessions={sessions}
+        activeSessionId="session-a"
+        onCreate={vi.fn()}
+        onSwitch={handleSwitch}
+        onRename={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    )
+
+    await user.click(screen.getByRole('combobox', { name: '选择会话' }))
+    await user.click(await screen.findByRole('option', { name: '正文续写 · 1 条' }))
+
+    expect(handleSwitch).toHaveBeenCalledWith('session-b')
+  })
+
+  it('支持重命名和删除会话入口', async () => {
+    const user = userEvent.setup()
+    const handleRename = vi.fn()
+    const handleDelete = vi.fn()
+
+    render(
+      <SessionManager
+        sessions={sessions}
+        activeSessionId="session-b"
+        onCreate={vi.fn()}
+        onSwitch={vi.fn()}
+        onRename={handleRename}
+        onDelete={handleDelete}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: '重命名会话 正文续写' }))
+    const input = screen.getByRole('textbox', { name: '会话标题' })
+    await user.clear(input)
+    await user.type(input, '新标题{Enter}')
+    await user.click(screen.getByRole('button', { name: '删除会话 正文续写' }))
+
+    expect(handleRename).toHaveBeenCalledWith('session-b', '新标题')
+    expect(handleDelete).toHaveBeenCalledWith('session-b')
+  })
+})
+
+describe('MessageList', () => {
+  it('历史消息首次加载后默认滚动到底部', async () => {
+    const { container, rerender } = render(
+      <MessageList
+        isStreaming={false}
+        activityContent=""
+        messages={[]}
+        scrollResetKey="session-a"
+      />,
+    )
+    const scroller = container.firstElementChild as HTMLDivElement
+    let scrollTop = 0
+    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, get: () => 1200 })
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, get: () => 320 })
+    Object.defineProperty(scroller, 'scrollTop', {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value) => {
+        scrollTop = value
+      },
+    })
+
+    rerender(
+      <MessageList
+        isStreaming={false}
+        activityContent=""
+        messages={[
+          { type: 'message', role: 'user', content: '第一条消息' },
+          { type: 'message', role: 'assistant', content: '最新回复' },
+        ]}
+        scrollResetKey="session-a"
+      />,
+    )
+
+    await waitFor(() => expect(scroller.scrollTop).toBe(1200))
+  })
+
+  it('用户向上浏览时消息更新不会自动拉回底部', () => {
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    })
+    try {
+      const { container, rerender } = render(
+        <MessageList
+          isStreaming={false}
+          activityContent=""
+          messages={[
+            { type: 'message', role: 'user', content: '第一条消息' },
+            { type: 'message', role: 'assistant', content: '历史回复' },
+          ]}
+          scrollResetKey="session-a"
+        />,
+      )
+      const scroller = container.firstElementChild as HTMLDivElement
+      let scrollTop = 0
+      Object.defineProperty(scroller, 'scrollHeight', { configurable: true, get: () => 1200 })
+      Object.defineProperty(scroller, 'clientHeight', { configurable: true, get: () => 320 })
+      Object.defineProperty(scroller, 'scrollTop', {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value) => {
+          scrollTop = value
+        },
+      })
+
+      scroller.scrollTop = 200
+      fireEvent.scroll(scroller)
+      scrollIntoView.mockClear()
+
+      rerender(
+        <MessageList
+          isStreaming={false}
+          activityContent=""
+          messages={[
+            { type: 'message', role: 'user', content: '第一条消息' },
+            { type: 'message', role: 'assistant', content: '历史回复' },
+            { type: 'message', role: 'assistant', content: '新增回复' },
+          ]}
+          scrollResetKey="session-a"
+        />,
+      )
+
+      expect(scroller.scrollTop).toBe(200)
+      expect(scrollIntoView).not.toHaveBeenCalled()
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+        configurable: true,
+        value: originalScrollIntoView,
+      })
+    }
+  })
+
+  it('展示 /clear 产生的上下文清理分界且保留前后消息', () => {
+    render(
+      <MessageList
+        isStreaming={false}
+        activityContent=""
+        messages={[
+          { type: 'message', role: 'user', content: '清理前问题' },
+          { type: 'clear', created_at: '2026-05-17T08:00:00Z' },
+          { type: 'message', role: 'assistant', content: '清理后回答' },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('清理前问题')).toBeInTheDocument()
+    expect(screen.getByRole('separator', { name: '上下文已清理' })).toBeInTheDocument()
+    expect(screen.getByText(/之前消息不再参与创作Agent上下文/)).toBeInTheDocument()
+    expect(screen.getByText('清理后回答')).toBeInTheDocument()
+  })
+})

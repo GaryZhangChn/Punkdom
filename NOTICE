@@ -1,0 +1,15 @@
+Punkdom v0.1
+
+This product includes software derived from Nova:
+
+  Upstream project: https://github.com/alfredxw/nova
+  Upstream commit: 8e4528c48875e0fdaacc5548b1b2ad197259fff6
+  Upstream author: alfred <xinggwang@gmail.com>
+  Upstream license: Apache License, Version 2.0
+
+Punkdom v0.1 imports the upstream source as a squashed baseline and applies
+project-wide renaming from Nova to Punkdom, including CLI names, configuration
+keys, workspace metadata directories, frontend storage keys, and user-facing
+product text.
+
+The Apache-2.0 license text is preserved in LICENSE.

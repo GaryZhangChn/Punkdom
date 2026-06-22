@@ -1,0 +1,943 @@
+import { BookMarked, BookOpen, ChevronDown, ChevronRight, Database, FileText, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, RefreshCw, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
+import { FileTree } from '@/components/Sidebar/FileTree'
+import { SearchPanel } from '@/components/Sidebar/SearchPanel'
+import { AgentPanel } from '@/components/Chat/AgentPanel'
+import { MarkdownEditor } from '@/components/Editor/MarkdownEditor'
+import { VersionPanel } from '@/components/Versions/VersionPanel'
+import { HomeView } from '@/components/Home/HomeView'
+import { InteractiveLayout } from '@/features/interactive/components/InteractiveLayout'
+import { SettingPanel } from '@/features/interactive/components/SettingPanel'
+import { getInteractiveTellers } from '@/features/interactive/api'
+import { useInteractiveStore } from '@/features/interactive/stores/interactive-store'
+import { AgentsView } from '@/features/agents/AgentsView'
+import { AutomationsView } from '@/features/automations/AutomationsView'
+import { SkillsView } from '@/features/skills/SkillsView'
+import { SettingsView } from '@/features/settings/SettingsView'
+import type { Teller } from '@/features/interactive/types'
+import type { FileNode } from '@/hooks/useWorkspace'
+import type { BookRecord, ChapterSummary, ChatMessage, ContextAnalysis, DocumentPreview, LoreItem, SessionSummary, TextSelection, WorkspaceSearchResult, WorkspaceSummary } from '@/lib/api'
+import type { RightPanel, WorkspaceMode } from '@/stores/workspace-store'
+import type { Tab } from './TabController'
+import { TabController, tabKey } from './TabController'
+import { WorkbenchShell } from './WorkbenchShell'
+import { flattenFileTree, formatNumber } from './workbench-utils'
+
+const WRITING_AGENT_INIT_EVENT = 'punkdom:writing-agent-init'
+type MainRouteId = 'settings' | 'skills' | 'agents' | 'automations' | 'books' | 'interactive' | 'versions' | 'ide-lore' | 'ide-teller' | 'ide-writing'
+
+interface ModeRouterProps {
+  mode: WorkspaceMode
+  booksReturnMode: 'ide' | 'interactive'
+  currentBookName: string
+  workspace: string
+  appVersion: string
+  summary: WorkspaceSummary | null
+  currentChapter?: ChapterSummary
+  chapterStats: Record<string, ChapterSummary>
+  isStreaming: boolean
+  projectVisible: boolean
+  activityBarExpanded: boolean
+  rightPanel: RightPanel
+  settingsOpen: boolean
+  interactiveRightVisible: boolean
+  punkdomDir: string
+  books: BookRecord[]
+  tree: FileNode[]
+  loading: boolean
+  selectedFile: string | null
+  fileContent: string
+  styles: string[]
+  openTabs: Tab[]
+  activeTabKey: string | null
+  sidebarView: 'outline' | 'files' | 'search'
+  editorSearchIntent: { path: string; query: string; line: number; nonce: number } | null
+  saveSignal: number
+  editorAutoSaveEnabled: boolean
+  editorAutoSaveDelayMs: number
+  versionRefreshSignal: number
+  messages: ChatMessage[]
+  sessions: SessionSummary[]
+  activeSessionId: string
+  activityContent: string
+  references: string[]
+  loreReferences: string[]
+  loreItems: LoreItem[]
+  styleReferences: string[]
+  textSelections: TextSelection[]
+  onSetMode: (mode: WorkspaceMode) => void
+  onToggleActivityBarExpanded: () => void
+  onToggleProjectVisible: () => void
+  onSetRightPanel: (panel: RightPanel) => void
+  onToggleSettings: () => void
+  onCloseSettings: () => void
+  onToggleInteractiveRightPanel: () => void
+  onSwitchBook: (path: string) => void
+  onBooksChange: () => void | Promise<void>
+  onOpenCharacterCardImport: () => void
+  onSetSidebarView: (view: 'outline' | 'files' | 'search') => void
+  onSelectSearchResult: (result: WorkspaceSearchResult, query: string) => void | Promise<void>
+  onRefreshTree: () => void
+  onSelectFile: (path: string) => void | Promise<void>
+  onReferenceFile: (path: string) => void
+  onCreateItem: (path: string, type: 'file' | 'dir') => Promise<void>
+  onDeleteItem: (path: string) => Promise<void>
+  onRenameItem: (path: string, newName: string) => Promise<void>
+  onCopyItem: (from: string, to: string) => Promise<void>
+  onMoveItem: (from: string, to: string) => Promise<void>
+  onActivateTab: (tab: Tab) => void
+  onCloseTab: (tab: Tab) => void
+  onSaveCurrentFile: (content: string) => Promise<boolean>
+  onQuoteSelection: (selection: TextSelection) => void
+  onCreateChatSession: (title?: string) => void | Promise<void>
+  onSwitchChatSession: (id: string) => void | Promise<void>
+  onRenameChatSession: (id: string, title: string) => void | Promise<void>
+  onDeleteChatSession: (id: string) => void | Promise<void>
+  onSend: (message: string) => void
+  onAnalyzeContext: (message: string) => Promise<ContextAnalysis>
+  onStop: () => void
+  onReferenceRemove: (path: string) => void
+  onLoreReferenceAdd: (id: string) => void
+  onLoreReferenceRemove: (id: string) => void
+  onStyleReferenceAdd: (path: string) => void
+  onStyleReferenceRemove: (path: string) => void
+  onTextSelectionRemove: (index: number) => void
+}
+
+export function ModeRouter(props: ModeRouterProps) {
+  const { t, i18n } = useTranslation()
+  const {
+    mode,
+    booksReturnMode,
+    currentBookName,
+    workspace,
+    appVersion,
+    summary,
+    currentChapter,
+    chapterStats,
+    isStreaming,
+    projectVisible,
+    activityBarExpanded,
+    rightPanel,
+    settingsOpen,
+    interactiveRightVisible,
+    punkdomDir,
+    books,
+    tree,
+    loading,
+    selectedFile,
+    fileContent,
+    styles,
+    openTabs,
+    activeTabKey,
+    sidebarView,
+    editorSearchIntent,
+    saveSignal,
+    editorAutoSaveEnabled,
+    editorAutoSaveDelayMs,
+    versionRefreshSignal,
+    messages,
+    sessions,
+    activeSessionId,
+    activityContent,
+    references,
+    loreReferences,
+    loreItems,
+    styleReferences,
+    textSelections,
+    onSetMode,
+    onToggleActivityBarExpanded,
+    onToggleProjectVisible,
+    onSetRightPanel,
+    onToggleSettings,
+    onCloseSettings,
+    onToggleInteractiveRightPanel,
+    onSwitchBook,
+    onBooksChange,
+    onOpenCharacterCardImport,
+    onSetSidebarView,
+    onSelectSearchResult,
+    onRefreshTree,
+    onSelectFile,
+    onReferenceFile,
+    onCreateItem,
+    onDeleteItem,
+    onRenameItem,
+    onCopyItem,
+    onMoveItem,
+    onActivateTab,
+    onCloseTab,
+    onSaveCurrentFile,
+    onQuoteSelection,
+    onCreateChatSession,
+    onSwitchChatSession,
+    onRenameChatSession,
+    onDeleteChatSession,
+    onSend,
+    onAnalyzeContext,
+    onStop,
+    onReferenceRemove,
+    onLoreReferenceAdd,
+    onLoreReferenceRemove,
+    onStyleReferenceAdd,
+    onStyleReferenceRemove,
+    onTextSelectionRemove,
+  } = props
+
+  const activeTab = openTabs.find((tab) => tabKey(tab) === activeTabKey) ?? null
+  const versionsVisible = rightPanel === 'versions'
+  const agentsVisible = mode === 'agents'
+  const automationsVisible = mode === 'automations'
+  const skillsVisible = mode === 'skills'
+  const ideWorkspacePanel = mode === 'ide' && (rightPanel === 'lore' || rightPanel === 'teller') ? rightPanel : null
+  const interactiveSubmode = useInteractiveStore((state) => state.submode)
+  const setInteractiveSubmode = useInteractiveStore((state) => state.setSubmode)
+  const [tellers, setTellers] = useState<Teller[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!workspace) {
+      setTellers([])
+      return () => { cancelled = true }
+    }
+    getInteractiveTellers()
+      .then((data) => {
+        if (!cancelled) setTellers(data)
+      })
+      .catch(() => {
+        if (!cancelled) setTellers([])
+      })
+    return () => { cancelled = true }
+  }, [workspace])
+
+  const loreReferenceLabels = useMemo(() => Object.fromEntries(loreItems.map((item) => [item.id, item.name])), [loreItems])
+  const loreSuggestions = useMemo(() => loreItems.map((item) => ({
+    value: item.id,
+    label: item.name,
+    description: t('planning.loreDescription', {
+      type: loreTypeLabel(item.type, t),
+      importance: loreImportanceLabel(item.importance, t),
+      loadMode: loreLoadModeLabel(item.load_mode, t),
+      tags: item.tags?.length ? ` · ${item.tags.join(i18n.language.startsWith('zh') ? '、' : ', ')}` : '',
+      brief: item.brief_description ? t('planning.loreBrief', { brief: item.brief_description }) : '',
+    }),
+  })), [i18n.language, loreItems, t])
+  const loreEmpty = Boolean(workspace) && loreItems.length === 0
+  const showSidebarLoading = loading && tree.length === 0 && !summary
+
+  const requestLoreInit = () => {
+    onSetMode('interactive')
+    setInteractiveSubmode('lore')
+  }
+  const requestWritingInit = () => {
+    onSetMode('ide')
+    onSetRightPanel('ai')
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent(WRITING_AGENT_INIT_EVENT, {
+        detail: { prompt: t('writingAgent.initPrompt') },
+      }))
+    }, 0)
+  }
+  const requestSkillsAgent = (prompt: string) => {
+    onSetMode('ide')
+    onSetRightPanel('ai')
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent(WRITING_AGENT_INIT_EVENT, {
+        detail: { prompt },
+      }))
+    }, 0)
+  }
+  const aiVisible = rightPanel === 'ai'
+  const closeBooks = () => {
+    if (booksReturnMode === 'interactive') {
+      onSetMode('interactive')
+      setInteractiveSubmode('story')
+      return
+    }
+    onSetMode('ide')
+    if (rightPanel === 'lore' || rightPanel === 'teller' || rightPanel === 'versions') onSetRightPanel(null)
+  }
+  const visibleMainRoute: MainRouteId = settingsOpen
+    ? 'settings'
+    : skillsVisible
+      ? 'skills'
+      : agentsVisible
+        ? 'agents'
+        : automationsVisible
+          ? 'automations'
+          : mode === 'books'
+            ? 'books'
+            : versionsVisible
+              ? 'versions'
+              : mode === 'interactive'
+                ? 'interactive'
+                : ideWorkspacePanel
+                  ? `ide-${ideWorkspacePanel}`
+                  : 'ide-writing'
+  const [mountedRoutes, setMountedRoutes] = useState<ReadonlySet<MainRouteId>>(() => new Set(['ide-writing', visibleMainRoute]))
+
+  useEffect(() => {
+    setMountedRoutes((current) => {
+      if (current.has(visibleMainRoute)) return current
+      const next = new Set(current)
+      next.add(visibleMainRoute)
+      return next
+    })
+  }, [visibleMainRoute])
+
+  const sidebar = (
+    <section className="punkdom-sidebar flex h-full flex-col border-r">
+      <div className="flex min-h-[92px] flex-col gap-2 border-b border-[var(--punkdom-border)] px-3 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-xs font-medium text-[var(--punkdom-text)]">{summary?.title || t('router.work')}</div>
+            <div className="mt-0.5 text-[11px] text-[var(--punkdom-text-faint)]">
+              {summary ? t('workbench.status.summary', { title: summary.title || t('workbench.untitled'), chapters: formatNumber(summary.chapter_count), words: formatNumber(summary.total_words) }) : t('router.loadingProgress')}
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onRefreshTree}
+              className="punkdom-nav-item rounded p-1"
+              title={t('router.refreshTree')}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={onToggleProjectVisible}
+              className="punkdom-nav-item rounded px-1"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onSetSidebarView('outline')}
+            className={`punkdom-nav-item flex-1 px-2 py-1 text-xs ${sidebarView === 'outline' ? 'is-active' : 'bg-[var(--punkdom-surface-2)]'}`}
+          >
+            {t('router.outline')}
+          </button>
+          <button
+            type="button"
+            onClick={() => onSetSidebarView('files')}
+            className={`punkdom-nav-item flex-1 px-2 py-1 text-xs ${sidebarView === 'files' ? 'is-active' : 'bg-[var(--punkdom-surface-2)]'}`}
+          >
+            {t('router.files')}
+          </button>
+          <button
+            type="button"
+            onClick={() => onSetSidebarView('search')}
+            className={`punkdom-nav-item flex-1 px-2 py-1 text-xs ${sidebarView === 'search' ? 'is-active' : 'bg-[var(--punkdom-surface-2)]'}`}
+          >
+            {t('router.search')}
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto p-2 text-xs">
+        {showSidebarLoading ? (
+          <div className="py-4 text-center text-[var(--punkdom-text-muted)]">{t('router.loading')}</div>
+        ) : sidebarView === 'outline' ? (
+          <ChapterOutline
+            chapters={summary?.chapters || []}
+            ideas={summary?.ideas}
+            outline={summary?.outline}
+            chapterPlans={summary?.chapter_plans || []}
+            selectedFile={selectedFile}
+            onSelectFile={onSelectFile}
+          />
+        ) : sidebarView === 'search' ? (
+          <SearchPanel
+            workspace={workspace}
+            onSelectResult={onSelectSearchResult}
+          />
+        ) : tree.length === 0 ? (
+          <div className="py-4 text-center text-[var(--punkdom-text-muted)]">{t('router.noFiles')}</div>
+        ) : (
+          <FileTree
+            nodes={tree}
+            selectedFile={selectedFile}
+            onSelectFile={onSelectFile}
+            onReferenceFile={onReferenceFile}
+            chapterStats={chapterStats}
+            onCreateItem={onCreateItem}
+            onDeleteItem={onDeleteItem}
+            onRenameItem={onRenameItem}
+            onCopyItem={onCopyItem}
+            onMoveItem={onMoveItem}
+          />
+        )}
+      </div>
+    </section>
+  )
+
+  const main = (
+    <main className="relative h-full min-w-0 overflow-hidden bg-[var(--punkdom-bg)]">
+      <MainRouteLayer visible={visibleMainRoute === 'ide-writing'}>
+        <TabController
+          tabs={openTabs}
+          activeTabKey={activeTabKey}
+          summary={summary}
+          actions={(
+            <IdeWritingInfoActions
+              projectVisible={projectVisible}
+              aiVisible={aiVisible}
+              onToggleProjectVisible={onToggleProjectVisible}
+              onToggleAgent={() => onSetRightPanel(aiVisible ? null : 'ai')}
+            />
+          )}
+          onActivateTab={onActivateTab}
+          onCloseTab={onCloseTab}
+        />
+        <div className="flex min-h-0 flex-1 flex-col">
+          {activeTab ? (
+            <MarkdownEditor
+              fileName={selectedFile}
+              content={fileContent}
+              onSave={onSaveCurrentFile}
+              onQuoteSelection={onQuoteSelection}
+              saveSignal={saveSignal}
+              autoSaveEnabled={editorAutoSaveEnabled}
+              autoSaveDelayMs={editorAutoSaveDelayMs}
+              chapterSummary={currentChapter}
+              workspaceSummary={summary}
+              searchIntent={editorSearchIntent?.path === selectedFile ? editorSearchIntent : null}
+            />
+          ) : (
+            loreEmpty ? (
+              <EmptyLoreGuide
+                emptyText={t('router.chooseFile')}
+                title={t('loreInit.ideTitle')}
+                description={t('loreInit.ideDescription')}
+                action={t('loreInit.ideAction')}
+                onClick={requestWritingInit}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-[var(--punkdom-text-muted)]">
+                {t('router.chooseFile')}
+              </div>
+            )
+          )}
+        </div>
+      </MainRouteLayer>
+
+      {mountedRoutes.has('interactive') && (
+        <MainRouteLayer visible={visibleMainRoute === 'interactive'}>
+          <InteractiveLayout
+            workspace={workspace}
+            styleSuggestions={styles}
+            loreEmpty={loreEmpty}
+            onRequestLoreInit={requestLoreInit}
+            rightPanelVisible={interactiveRightVisible}
+            onToggleRightPanel={onToggleInteractiveRightPanel}
+          />
+        </MainRouteLayer>
+      )}
+
+      {mountedRoutes.has('versions') && (
+        <MainRouteLayer visible={visibleMainRoute === 'versions'}>
+          <VersionPanel
+            workspace={workspace}
+            refreshSignal={versionRefreshSignal}
+            visible={versionsVisible}
+            onClose={() => onSetRightPanel(null)}
+          />
+        </MainRouteLayer>
+      )}
+      {mountedRoutes.has('ide-lore') && (
+        <MainRouteLayer visible={visibleMainRoute === 'ide-lore'}>
+          <IdeWorkspacePanel
+            title={t('workbench.activity.lore')}
+            icon={<Database className="h-3.5 w-3.5 text-[var(--punkdom-text-muted)]" />}
+            onClose={() => onSetRightPanel(null)}
+          >
+            <SettingPanel mode="lore" workspace={workspace} />
+          </IdeWorkspacePanel>
+        </MainRouteLayer>
+      )}
+      {mountedRoutes.has('ide-teller') && (
+        <MainRouteLayer visible={visibleMainRoute === 'ide-teller'}>
+          <IdeWorkspacePanel
+            title={t('workbench.activity.teller')}
+            icon={<SlidersHorizontal className="h-3.5 w-3.5 text-[var(--punkdom-text-muted)]" />}
+            onClose={() => onSetRightPanel(null)}
+          >
+            <SettingPanel mode="teller" workspace={workspace} tellers={tellers} onTellersChange={setTellers} />
+          </IdeWorkspacePanel>
+        </MainRouteLayer>
+      )}
+
+      {mountedRoutes.has('books') && (
+        <MainRouteLayer visible={visibleMainRoute === 'books'}>
+          <HomeView
+            workspace={workspace}
+            punkdomDir={punkdomDir}
+            books={books}
+            onSwitch={onSwitchBook}
+            onBooksChange={onBooksChange}
+            onOpenCharacterCardImport={onOpenCharacterCardImport}
+            onClose={closeBooks}
+          />
+        </MainRouteLayer>
+      )}
+      {mountedRoutes.has('skills') && (
+        <MainRouteLayer visible={visibleMainRoute === 'skills'}>
+          <SkillsView workspace={workspace} onClose={() => onSetMode(booksReturnMode)} onRequestAgent={requestSkillsAgent} />
+        </MainRouteLayer>
+      )}
+      {mountedRoutes.has('agents') && (
+        <MainRouteLayer visible={visibleMainRoute === 'agents'}>
+          <AgentsView onClose={() => onSetMode(booksReturnMode)} />
+        </MainRouteLayer>
+      )}
+      {mountedRoutes.has('automations') && (
+        <MainRouteLayer visible={visibleMainRoute === 'automations'}>
+          <AutomationsView workspace={workspace} onClose={() => onSetMode(booksReturnMode)} />
+        </MainRouteLayer>
+      )}
+      {mountedRoutes.has('settings') && (
+        <MainRouteLayer visible={visibleMainRoute === 'settings'}>
+          <SettingsView onClose={onCloseSettings} />
+        </MainRouteLayer>
+      )}
+    </main>
+  )
+
+  const rightPanelContent = rightPanel === 'ai' ? (
+    <AgentPanel
+      workspace={workspace}
+      currentChapter={currentChapter}
+      selectedFile={selectedFile}
+      tellers={tellers}
+      messages={messages}
+      sessions={sessions}
+      activeSessionId={activeSessionId}
+      isStreaming={isStreaming}
+      activityContent={activityContent}
+      references={references}
+      loreReferences={loreReferences}
+      loreReferenceLabels={loreReferenceLabels}
+      loreSuggestions={loreSuggestions}
+      styleReferences={styleReferences}
+      textSelections={textSelections}
+      fileSuggestions={flattenFileTree(tree)}
+      styleSuggestions={styles}
+      onCreateSession={onCreateChatSession}
+      onSwitchSession={onSwitchChatSession}
+      onRenameSession={onRenameChatSession}
+      onDeleteSession={onDeleteChatSession}
+      onSend={onSend}
+      onAnalyzeContext={onAnalyzeContext}
+      onStop={onStop}
+      onReferenceRemove={onReferenceRemove}
+      onLoreReferenceAdd={onLoreReferenceAdd}
+      onLoreReferenceRemove={onLoreReferenceRemove}
+      onStyleReferenceAdd={onStyleReferenceAdd}
+      onStyleReferenceRemove={onStyleReferenceRemove}
+      onTextSelectionRemove={onTextSelectionRemove}
+      onOpenReviewConfig={() => onSetMode('automations')}
+      onOpenReviewFile={onSelectFile}
+      onClose={() => onSetRightPanel(null)}
+    />
+  ) : null
+
+  return (
+    <WorkbenchShell
+      mode={mode}
+      booksReturnMode={booksReturnMode}
+      currentBookName={currentBookName}
+      workspace={workspace}
+      appVersion={appVersion}
+      summary={summary}
+      currentChapter={currentChapter}
+      isStreaming={isStreaming}
+      projectVisible={projectVisible}
+      activityBarExpanded={activityBarExpanded}
+      rightPanel={rightPanel}
+      settingsOpen={settingsOpen}
+      interactiveSubmode={interactiveSubmode}
+      sidebar={sidebar}
+      main={main}
+      rightPanelContent={rightPanelContent}
+      onSetMode={onSetMode}
+      onToggleActivityBarExpanded={onToggleActivityBarExpanded}
+      onSetInteractiveSubmode={setInteractiveSubmode}
+      onSetRightPanel={onSetRightPanel}
+      onToggleSettings={onToggleSettings}
+      onCloseSettings={onCloseSettings}
+    />
+  )
+}
+
+function MainRouteLayer({ visible, children }: { visible: boolean; children: ReactNode }) {
+  return (
+    <section hidden={!visible} aria-hidden={!visible} className="absolute inset-0 flex min-h-0 flex-col">
+      {children}
+    </section>
+  )
+}
+
+function IdeWritingInfoActions({
+  projectVisible,
+  aiVisible,
+  onToggleProjectVisible,
+  onToggleAgent,
+}: {
+  projectVisible: boolean
+  aiVisible: boolean
+  onToggleProjectVisible: () => void
+  onToggleAgent: () => void
+}) {
+  const { t } = useTranslation()
+  const ProjectIcon = projectVisible ? PanelLeftClose : PanelLeftOpen
+  const AgentIcon = aiVisible ? PanelRightClose : PanelRightOpen
+  const projectLabel = projectVisible ? t('router.hideOutline') : t('router.showOutline')
+  const agentLabel = aiVisible ? t('router.hideAgent') : t('router.showAgent')
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onToggleProjectVisible}
+        aria-label={projectLabel}
+        aria-pressed={projectVisible}
+        className={`punkdom-nav-item flex h-7 w-7 items-center justify-center ${projectVisible ? 'is-active' : ''}`}
+        title={projectLabel}
+      >
+        <ProjectIcon className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onToggleAgent}
+        aria-label={agentLabel}
+        aria-pressed={aiVisible}
+        className={`punkdom-nav-item flex h-7 w-7 items-center justify-center ${aiVisible ? 'is-active' : ''}`}
+        title={agentLabel}
+      >
+        <AgentIcon className="h-3.5 w-3.5" />
+      </button>
+    </>
+  )
+}
+
+function IdeWorkspacePanel({
+  title,
+  icon,
+  children,
+  onClose,
+}: {
+  title: string
+  icon: ReactNode
+  children: ReactNode
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <section className="flex h-full min-h-0 flex-col bg-[var(--punkdom-bg)] text-[var(--punkdom-text)]">
+      <div className="punkdom-topbar flex h-10 shrink-0 items-center justify-between border-b border-[var(--punkdom-border)] px-3">
+        <div className="flex items-center gap-2 text-xs font-medium text-[var(--punkdom-text)]">
+          {icon}
+          {title}
+        </div>
+        <button type="button" onClick={onClose} className="punkdom-nav-item rounded px-1 text-xs" aria-label={`${t('common.close')} ${title}`}>×</button>
+      </div>
+      <div className="min-h-0 flex-1">
+        {children}
+      </div>
+    </section>
+  )
+}
+
+function ChapterOutline({
+  chapters,
+  ideas,
+  outline,
+  chapterPlans,
+  selectedFile,
+  onSelectFile,
+}: {
+  chapters: ChapterSummary[]
+  ideas?: DocumentPreview
+  outline?: DocumentPreview
+  chapterPlans: DocumentPreview[]
+  selectedFile: string | null
+  onSelectFile: (path: string) => void | Promise<void>
+}) {
+  const { t } = useTranslation()
+  const [collapsedVolumes, setCollapsedVolumes] = useState<Set<string>>(() => new Set())
+  const [chapterPlanHistoryExpanded, setChapterPlanHistoryExpanded] = useState(false)
+  const volumes = useMemo(() => groupChaptersByVolume(chapters, t), [chapters, t])
+  const hasPlanning = ideas || outline || chapterPlans.length > 0
+  const latestChapterPlan = chapterPlans[chapterPlans.length - 1]
+  const historicalChapterPlans = useMemo(() => chapterPlans.slice(0, -1), [chapterPlans])
+
+  useEffect(() => {
+    if (selectedFile && historicalChapterPlans.some((plan) => plan.path === selectedFile)) {
+      setChapterPlanHistoryExpanded(true)
+    }
+  }, [historicalChapterPlans, selectedFile])
+
+  const toggleVolume = (key: string) => {
+    setCollapsedVolumes(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  if (!hasPlanning && chapters.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-[var(--punkdom-border)] bg-[var(--punkdom-surface)] px-3 py-4 text-center text-xs text-[var(--punkdom-text-faint)]">
+        {t('planning.noChapters')}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <section className="space-y-1.5">
+        <div className="px-1 text-[11px] font-medium text-[var(--punkdom-text-faint)]">{t('planning.ideas')}</div>
+        {ideas ? (
+          <PlanningListItem document={ideas} icon="ideas" selected={selectedFile === ideas.path} onSelectFile={onSelectFile} />
+        ) : (
+          <PlanningEmptyState text={t('planning.ideasEmpty')} />
+        )}
+      </section>
+
+      <section className="space-y-1.5">
+        <div className="px-1 text-[11px] font-medium text-[var(--punkdom-text-faint)]">{t('planning.outline')}</div>
+        {outline ? (
+          <PlanningListItem document={outline} icon="outline" selected={selectedFile === outline.path} onSelectFile={onSelectFile} />
+        ) : (
+          <PlanningEmptyState text={t('planning.outlineEmpty')} />
+        )}
+      </section>
+
+      <section className="space-y-1.5">
+        <div className="flex items-center justify-between px-1 text-[11px] font-medium text-[var(--punkdom-text-faint)]">
+          <span>{t('planning.chapterPlans')}</span>
+          {chapterPlans.length > 0 && <span>{t('planning.chapterPlanCount', { count: chapterPlans.length })}</span>}
+        </div>
+        {chapterPlans.length > 0 ? (
+          <div className="space-y-1">
+            {latestChapterPlan && (
+              <PlanningListItem document={latestChapterPlan} icon="plan" selected={selectedFile === latestChapterPlan.path} onSelectFile={onSelectFile} />
+            )}
+            {historicalChapterPlans.length > 0 && (
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  className="punkdom-nav-item flex w-full items-center gap-2 rounded-[var(--punkdom-radius)] px-2 py-1.5 text-left text-[11px] text-[var(--punkdom-text-muted)]"
+                  onClick={() => setChapterPlanHistoryExpanded((expanded) => !expanded)}
+                >
+                  {chapterPlanHistoryExpanded ? (
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--punkdom-text-faint)]" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--punkdom-text-faint)]" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate">{t('planning.chapterPlanHistory')}</span>
+                  <span className="shrink-0 text-[var(--punkdom-text-faint)]">{t('planning.chapterPlanCount', { count: historicalChapterPlans.length })}</span>
+                </button>
+                {chapterPlanHistoryExpanded && (
+                  <div className="space-y-1 pl-4">
+                    {historicalChapterPlans.map((plan) => (
+                      <PlanningListItem key={plan.path} document={plan} icon="plan" selected={selectedFile === plan.path} onSelectFile={onSelectFile} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <PlanningEmptyState text={t('planning.chapterPlansEmpty')} />
+        )}
+      </section>
+
+      <section className="space-y-1.5">
+        <div className="px-1 text-[11px] font-medium text-[var(--punkdom-text-faint)]">{t('planning.volumeChapters')}</div>
+        {volumes.length === 0 ? (
+          <PlanningEmptyState text={t('planning.noChapters')} />
+        ) : (
+          <div className="space-y-1.5">
+            {volumes.map((volume) => {
+              const expanded = !collapsedVolumes.has(volume.key)
+              return (
+                <div key={volume.key} className="space-y-1">
+                  <button
+                    type="button"
+                    className="punkdom-nav-item flex w-full items-center gap-2 border border-transparent bg-[var(--punkdom-surface)] px-2 py-1.5 text-left"
+                    onClick={() => toggleVolume(volume.key)}
+                  >
+                    {expanded ? (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--punkdom-text-muted)]" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--punkdom-text-muted)]" />
+                    )}
+                    <BookOpen className="h-3.5 w-3.5 shrink-0 text-[var(--punkdom-text-muted)]" />
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--punkdom-text)]">{volume.label}</span>
+                    <span className="shrink-0 text-[11px] text-[var(--punkdom-text-faint)]">{t('common.chapters', { count: volume.chapters.length })}</span>
+                  </button>
+                  {expanded && (
+                    <div className="space-y-1 pl-4">
+                      {volume.chapters.map((chapter) => (
+                        <ChapterOutlineItem
+                          key={chapter.path}
+                          chapter={chapter}
+                          active={selectedFile === chapter.path}
+                          onSelectFile={onSelectFile}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function PlanningListItem({
+  document,
+  icon,
+  selected,
+  onSelectFile,
+}: {
+  document: DocumentPreview
+  icon: 'ideas' | 'outline' | 'plan'
+  selected: boolean
+  onSelectFile: (path: string) => void | Promise<void>
+}) {
+  const Icon = icon === 'outline' ? BookMarked : FileText
+  return (
+    <button
+      type="button"
+      className={`punkdom-nav-item w-full border px-3 py-2 text-left ${
+        selected
+          ? 'is-active border-[var(--punkdom-border)]'
+          : 'border-transparent bg-[var(--punkdom-surface)]'
+      }`}
+      onClick={() => onSelectFile(document.path)}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <Icon className={`h-3.5 w-3.5 shrink-0 ${selected ? 'text-[var(--punkdom-text)]' : 'text-[var(--punkdom-text-muted)]'}`} />
+        <span className="min-w-0 flex-1 truncate text-xs font-medium">{document.title}</span>
+      </div>
+    </button>
+  )
+}
+
+function PlanningEmptyState({ text }: { text: string }) {
+  return (
+    <div className="rounded border border-dashed border-[var(--punkdom-border)] bg-[var(--punkdom-surface)] px-2.5 py-2 text-[11px] text-[var(--punkdom-text-faint)]">
+      {text}
+    </div>
+  )
+}
+
+function EmptyLoreGuide({
+  emptyText,
+  title,
+  description,
+  action,
+  onClick,
+}: {
+  emptyText: string
+  title: string
+  description: string
+  action: string
+  onClick: () => void
+}) {
+  return (
+    <div className="flex h-full items-center justify-center px-6 text-center">
+      <div className="flex max-w-md flex-col items-center gap-3 rounded-[var(--punkdom-radius)] border border-dashed border-[var(--punkdom-border)] bg-[var(--punkdom-surface)] px-6 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+        <Sparkles className="h-4 w-4 text-[var(--punkdom-text-muted)]" />
+        <div className="space-y-1">
+          <div className="text-xs text-[var(--punkdom-text-faint)]">{emptyText}</div>
+          <div className="text-sm font-medium text-[var(--punkdom-text)]">{title}</div>
+          <div className="text-xs leading-5 text-[var(--punkdom-text-faint)]">{description}</div>
+        </div>
+        <button
+          type="button"
+          className="punkdom-nav-item rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface-2)] px-3 py-1.5 text-xs text-[var(--punkdom-text-muted)] hover:text-[var(--punkdom-text)]"
+          onClick={onClick}
+        >
+          {action}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ChapterOutlineItem({
+  chapter,
+  active,
+  onSelectFile,
+}: {
+  chapter: ChapterSummary
+  active: boolean
+  onSelectFile: (path: string) => void | Promise<void>
+}) {
+  const { t } = useTranslation()
+  return (
+    <button
+      type="button"
+      className={`punkdom-nav-item w-full border px-3 py-2 text-left ${
+        active
+          ? 'is-active border-[var(--punkdom-border)]'
+          : 'border-transparent bg-[var(--punkdom-surface)]'
+      }`}
+      onClick={() => onSelectFile(chapter.path)}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <BookOpen className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-[var(--punkdom-text)]' : 'text-[var(--punkdom-text-muted)]'}`} />
+        <span className="truncate text-xs font-medium">{chapter.display_title}</span>
+      </div>
+      <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--punkdom-text-faint)]">
+        <span>{t('common.words', { count: formatNumber(chapter.words) })}</span>
+        <span className="rounded border border-[var(--punkdom-border)] bg-[var(--punkdom-surface-2)] px-1.5 text-[var(--punkdom-text-muted)]">{chapter.status}</span>
+      </div>
+    </button>
+  )
+}
+
+function groupChaptersByVolume(chapters: ChapterSummary[], t: (key: string) => string) {
+  const map = new Map<string, { key: string; label: string; chapters: ChapterSummary[] }>()
+  for (const chapter of chapters) {
+    const key = chapter.volume_path || chapter.volume || 'chapters'
+    const label = chapter.volume || t('planning.unvolumed')
+    const existing = map.get(key)
+    if (existing) {
+      existing.chapters.push(chapter)
+    } else {
+      map.set(key, { key, label, chapters: [chapter] })
+    }
+  }
+  return Array.from(map.values())
+}
+
+function loreTypeLabel(type: LoreItem['type'], t: (key: string) => string) {
+  const key = `lore.type.${type}`
+  const label = t(key)
+  return label === key ? t('lore.type.default') : label
+}
+
+function loreImportanceLabel(importance: LoreItem['importance'], t: (key: string) => string) {
+  const key = `lore.importance.${importance}`
+  const label = t(key)
+  return label === key ? t('lore.importance.default') : label
+}
+
+function loreLoadModeLabel(loadMode: LoreItem['load_mode'], t: (key: string) => string) {
+  const key = `lore.loadMode.${loadMode}`
+  const label = t(key)
+  return label === key ? t('lore.loadMode.default') : label
+}
