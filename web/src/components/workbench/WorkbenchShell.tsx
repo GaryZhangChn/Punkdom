@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { BookOpen, Bot, Clock3, Database, FileText, History, MessageSquareText, Moon, NotebookText, PanelLeft, PenLine, Settings, SlidersHorizontal, Sparkles, Sun, Swords } from 'lucide-react'
+import { BookOpen, Bot, Clock3, Database, FileText, History, MessageSquareText, Moon, NotebookText, PanelLeft, PenLine, Settings, SlidersHorizontal, Sparkles, Stone, Sun } from 'lucide-react'
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
 import { WorkspaceLayout } from '@/components/layout/workspace-layout'
 import { WorkspaceMobileLayout, type MobileNavItem } from '@/components/layout/workspace-mobile-layout'
@@ -590,7 +590,7 @@ export function WorkbenchShell({
 function PunkdomBrand() {
   return (
     <div className="flex shrink-0 items-center gap-1.5 font-semibold text-[var(--punkdom-text)]" aria-label="Punkdom">
-      <Swords aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--punkdom-text)]" strokeWidth={2} />
+      <Stone aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--punkdom-text)]" strokeWidth={2} />
       <span>Punkdom</span>
     </div>
   )

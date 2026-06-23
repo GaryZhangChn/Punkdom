@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Changed the Punkdom wordmark icon from `Swords` to the Lucide `Stone` icon.
+
 ## [v0.1.2] - 2026-06-23
 
 - Added a `Swords` Lucide mark beside the Punkdom wordmark in the workbench top bar.
