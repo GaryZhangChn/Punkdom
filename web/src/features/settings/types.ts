@@ -234,8 +234,6 @@ export interface UpdateCheckResult {
   release_notes?: string
   asset?: UpdateAsset
   message?: string
-  docker?: boolean
-  docker_update_command?: string
 }
 
 export interface UpdateInstallResult {

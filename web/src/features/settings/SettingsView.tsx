@@ -720,7 +720,6 @@ function UpdatePanel({
   const { t } = useTranslation()
   const releaseDate = status?.published_at ? new Date(status.published_at).toLocaleString() : ''
   const installDisabled = installing || checking || !status?.can_install
-  const isDockerUpdate = Boolean(status?.docker)
   return (
     <div className="rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface-2)] px-3 py-3">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -742,15 +741,6 @@ function UpdatePanel({
           {status?.asset && (
             <div className="truncate text-[var(--punkdom-text-faint)]">
               {t('settings.updates.asset', { name: status.asset.name, size: formatBytes(status.asset.size) })}
-            </div>
-          )}
-          {isDockerUpdate && (
-            <div className="space-y-1 rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface)] px-2.5 py-2 text-[var(--punkdom-text-muted)]">
-              <div>{t('settings.updates.dockerHint')}</div>
-              <code className="block overflow-x-auto rounded-[var(--punkdom-radius)] bg-[var(--punkdom-code-bg)] px-2 py-1 font-mono text-[var(--punkdom-code-text)]">
-                {status?.docker_update_command || 'docker compose pull punkdom && docker compose up -d punkdom'}
-              </code>
-              <div className="text-[var(--punkdom-text-faint)]">{t('settings.updates.dockerWatchtower')}</div>
             </div>
           )}
           {installResult?.installed && (
@@ -788,7 +778,7 @@ function UpdatePanel({
             className="punkdom-nav-item inline-flex items-center gap-1.5 rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-active)] px-2.5 py-1 text-[var(--punkdom-text)] disabled:opacity-50"
           >
             <Download className="h-3.5 w-3.5" />
-            {isDockerUpdate ? t('settings.updates.dockerInstallDisabled') : (installing ? t('settings.updates.installing') : t('settings.updates.install'))}
+            {installing ? t('settings.updates.installing') : t('settings.updates.install')}
           </button>
         </div>
       </div>

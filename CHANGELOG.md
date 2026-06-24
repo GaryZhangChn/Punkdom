@@ -14,10 +14,7 @@
 - Recolored Paper theme user chat bubbles to use a deeper warm neutral instead of the terracotta accent.
 - Aligned narrative injection rule switches with a fixed right column and centered switch thumb geometry.
 - Renamed Project Repository labels from book/bookshelf language to project/text language in Chinese and English.
-- Added Docker image publishing to GHCR, Docker Compose deployment assets, and Docker-specific update guidance that uses image refreshes instead of in-container binary replacement.
-- Fixed Docker build context exclusions so Dockerfile and deployment templates remain available for GHCR release builds.
-- Switched the Docker Go builder image to the current official Alpine variant to avoid patch-tag availability failures during GHCR builds.
-- Pinned `pnpm@10` inside Docker web builds so frozen-lockfile installs match the release workflow.
+- Removed container image publishing and deployment assets from the v0.1.3 release scope.
 - Added project zip export/download and project zip import for moving Punkdom projects between installations.
 - Changed project deletion to move folders into `.punkdom/Trash`, with a Deleted section that supports restore and permanent deletion.
 - Made the Deleted projects section collapsed by default on every page load.
