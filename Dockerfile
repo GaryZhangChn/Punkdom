@@ -8,7 +8,7 @@ RUN pnpm install --frozen-lockfile
 COPY web ./
 RUN pnpm build
 
-FROM golang:1.26.1-alpine AS go-builder
+FROM golang:alpine AS go-builder
 WORKDIR /src
 ARG PUNKDOM_VERSION=dev
 ENV CGO_ENABLED=0
