@@ -11,6 +11,8 @@ v0.1 includes Writing Mode, Interactive Mode, premise management, creative Agent
 - Project deletion now moves folders into `.punkdom/Trash`; the Deleted section is collapsed by default and supports restore plus permanent deletion while staying in Projects.
 - Added Data Backup in Settings for downloading the full `.punkdom` data directory as a zip and restoring from a backup zip with overwrite semantics.
 - Polished Paper Mode with stronger sidebar active states, warmer user message bubbles, and flatter chat/tool cards.
+- Polished the Story Route Map by removing the inactive bottom hint/minimap bar and replacing the dark selected-node highlight with a thicker accent outline.
+- Made the status-bar version read the backend runtime version so hot-reloaded or stale frontend constants no longer leave the UI on an older version.
 - Updated primary navigation order and naming: Projects now follows Versions, and the Chinese Narratives label is `叙事模式`.
 - Fixed narrative rule switch alignment, Projects navigation after metadata save/restore, and missing created time after moving projects to Trash.
 

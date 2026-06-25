@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [v0.1.3] - 2026-06-24
+## [v0.1.3] - 2026-06-25
 
 - Changed the Punkdom wordmark icon from `Swords` to the Lucide `Stone` icon.
 - Flattened chat message bubbles and tool cards by removing their drop shadows.
@@ -23,6 +23,9 @@
 - Kept the Projects view open after restoring a deleted project.
 - Preserved project metadata, including creation time, when moving projects to Trash.
 - Added full Punkdom data backup export and overwrite restore controls in Settings.
+- Removed the inactive Story Route Map footer hint/minimap bar while preserving node selection and branch creation.
+- Replaced the dark selected-node highlight in the Story Route Map with a thicker accent outline.
+- Added runtime application version reporting through `/api/status` and made the status bar update from that backend version.
 
 ## [v0.1.2] - 2026-06-23
 
