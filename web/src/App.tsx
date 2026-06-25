@@ -4,7 +4,7 @@ import { useTheme } from 'next-themes'
 import { fetchSettings, updateUserSettings } from '@/features/settings/api'
 import { applyFontSettings, fontSettingsFromEffective } from '@/features/settings/font-variables'
 import type { AgentModelOverride, Settings } from '@/features/settings/types'
-import { getLoreItems, importCharacterCard, previewCharacterCard, type CharacterCardPreview, type LoreItem, type WorkspaceSearchResult } from '@/lib/api'
+import { getLoreItems, getStatus, importCharacterCard, previewCharacterCard, type CharacterCardPreview, type LoreItem, type WorkspaceSearchResult } from '@/lib/api'
 import { CommandPalette } from '@/components/common/command-palette'
 import { useWorkspace } from '@/hooks/useWorkspace'
 import { useChat } from '@/hooks/useChat'
@@ -69,6 +69,7 @@ function App() {
   const [characterCardTargetMode, setCharacterCardTargetMode] = useState<CharacterCardTargetMode>('new_book')
   const [characterCardBookTitle, setCharacterCardBookTitle] = useState('')
   const [characterCardUserName, setCharacterCardUserName] = useState('')
+  const [appVersion, setAppVersion] = useState(APP_VERSION)
   const [characterCardPreviewing, setCharacterCardPreviewing] = useState(false)
   const [characterCardImporting, setCharacterCardImporting] = useState(false)
   const [characterCardError, setCharacterCardError] = useState('')
@@ -88,6 +89,20 @@ function App() {
   const setCommandOpen = useWorkspaceStore((state) => state.setCommandOpen)
   const setMode = useWorkspaceStore((state) => state.setMode)
   const setSelectedChapterId = useWorkspaceStore((state) => state.setSelectedChapterId)
+
+  useEffect(() => {
+    let cancelled = false
+    getStatus()
+      .then((status) => {
+        if (cancelled) return
+        const version = normalizeRuntimeVersion(status.app_version)
+        if (version) setAppVersion(version)
+      })
+      .catch((error) => console.warn('加载运行时版本失败', error))
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (mode === 'books' || mode === 'skills' || mode === 'agents' || mode === 'automations') return
@@ -558,7 +573,7 @@ function App() {
         booksReturnMode={booksReturnMode}
         currentBookName={currentBookName}
         workspace={workspace}
-        appVersion={APP_VERSION}
+        appVersion={appVersion}
         statusModelName={statusModelName}
         summary={summary}
         currentChapter={currentChapter}
@@ -687,6 +702,12 @@ function normalizeAutoSaveDelayMs(value: number | null | undefined) {
     return AUTO_SAVE_DELAY_FALLBACK_MS
   }
   return Math.floor(value)
+}
+
+function normalizeRuntimeVersion(value?: string) {
+  const version = value?.trim()
+  if (!version || version === 'dev' || version === 'development') return ''
+  return version.replace(/^v/, '')
 }
 
 function isIdeWorkspacePanel(panel: RightPanel): panel is 'lore' | 'creator' | 'teller' | 'versions' {

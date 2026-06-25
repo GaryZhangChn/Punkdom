@@ -46,7 +46,7 @@ describe('BranchTimeline', () => {
 
     fireEvent.click(screen.getByText('进入密林'))
 
-    expect(screen.getByText(/已选节点/)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /创建剧情线/ }).some((button) => !button.hasAttribute('disabled'))).toBe(true)
     expect(onCreateBranch).not.toHaveBeenCalled()
   })
 
@@ -152,7 +152,7 @@ describe('BranchTimeline', () => {
     fireEvent.pointerUp(nodeButton!, { pointerId: 1 })
     fireEvent.click(nodeButton!)
 
-    expect(screen.getByText(/已选节点/)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /创建剧情线/ }).some((button) => !button.hasAttribute('disabled'))).toBe(true)
   })
 
   it('creates a branch from the clicked node even if snapshot refreshes before confirm', async () => {

@@ -10,7 +10,7 @@ import type {
   WorkspaceSummary,
 } from './types'
 
-export async function getStatus(): Promise<{ has_state: boolean; context: string }> {
+export async function getStatus(): Promise<{ has_state: boolean; context: string; app_version?: string }> {
   return requestJSON('/api/status')
 }
 

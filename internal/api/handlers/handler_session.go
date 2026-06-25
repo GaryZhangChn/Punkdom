@@ -9,6 +9,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 
+	"punkdom/internal/buildinfo"
 	"punkdom/internal/restart"
 	"punkdom/internal/session"
 )
@@ -151,8 +152,9 @@ func (h *Handlers) HandleSessionDelete(ctx context.Context, c *app.RequestContex
 
 // statusResponse 状态响应。
 type statusResponse struct {
-	HasState bool   `json:"has_state"`
-	Context  string `json:"context"`
+	HasState   bool   `json:"has_state"`
+	Context    string `json:"context"`
+	AppVersion string `json:"app_version"`
 }
 
 var scheduleRestart = restart.ScheduleCurrentProcess
@@ -171,8 +173,9 @@ func (h *Handlers) HandleRestart(ctx context.Context, c *app.RequestContext) {
 func (h *Handlers) HandleStatus(ctx context.Context, c *app.RequestContext) {
 	hasState, stateCtx := h.app.Status()
 	writeJSON(c, consts.StatusOK, statusResponse{
-		HasState: hasState,
-		Context:  stateCtx,
+		HasState:   hasState,
+		Context:    stateCtx,
+		AppVersion: buildinfo.Version,
 	})
 }
 

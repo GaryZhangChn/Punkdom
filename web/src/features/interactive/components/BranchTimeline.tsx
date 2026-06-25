@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { ArrowLeft, ChevronDown, ChevronUp, GitBranch, Move, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
@@ -302,15 +302,16 @@ export function BranchTimeline({
                   key={node.id}
                   type="button"
                   data-no-drag
-                  className={`absolute z-10 flex h-[52px] cursor-pointer items-center gap-2 overflow-hidden rounded-[var(--punkdom-radius)] border px-3 py-1.5 text-left shadow-[0_8px_18px_rgba(0,0,0,0.20)] backdrop-blur transition ${node.id === selectedNodeId ? 'text-[var(--punkdom-text)] ring-2 ring-white/10' : node.current ? 'text-[var(--punkdom-text)]' : 'border-[var(--punkdom-border)] text-[var(--punkdom-text-muted)] hover:border-[var(--punkdom-active)] hover:text-[var(--punkdom-text)]'}`}
+                  className={`absolute z-10 flex h-[52px] cursor-pointer items-center gap-2 overflow-hidden rounded-[var(--punkdom-radius)] border px-3 py-1.5 text-left shadow-[0_8px_18px_rgba(0,0,0,0.14)] backdrop-blur transition ${node.id === selectedNodeId ? 'text-[var(--punkdom-text)]' : node.current ? 'text-[var(--punkdom-text)]' : 'border-[var(--punkdom-border)] text-[var(--punkdom-text-muted)] hover:border-[var(--punkdom-active)] hover:text-[var(--punkdom-text)]'}`}
                   style={{
                     left: x,
                     top: y,
                     width: layout.metrics.nodeCardWidth,
-                    background: node.id === selectedNodeId ? `linear-gradient(180deg, rgba(48,50,56,0.96), ${colorSoft})` : colorSoft,
+                    background: colorSoft,
                     borderColor: node.id === selectedNodeId || node.current ? color : undefined,
+                    borderWidth: node.id === selectedNodeId ? 2 : undefined,
                     boxShadow: node.id === selectedNodeId
-                      ? `0 10px 24px rgba(0,0,0,0.28), 0 0 0 1px ${color}33`
+                      ? `0 0 0 2px ${color}33`
                       : undefined,
                   }}
                   onClick={() => selectNode(node)}
@@ -350,23 +351,6 @@ export function BranchTimeline({
             </div>
           </div>
 
-          <div className="flex min-h-[48px] shrink-0 items-center justify-between gap-3 border-t border-[var(--punkdom-border)] bg-[var(--punkdom-surface)] px-3 text-xs text-[var(--punkdom-text-faint)] sm:px-4">
-            {selectedNode ? (
-              <div className="min-w-0">
-                <span className="text-[var(--punkdom-text)]">{t('branchTimeline.selectedNode')}</span>
-                <span className="truncate">{selectedNode.title}</span>
-              </div>
-            ) : (
-              <span>{t('branchTimeline.selectHint')}</span>
-            )}
-            <MiniMap layout={layout} scrollRef={scrollRef} ariaLabel={t('branchTimeline.minimap')} />
-            {selectedNode && (
-              <Button size="xs" className="shrink-0 gap-1.5 border border-[var(--punkdom-border)] bg-[var(--punkdom-active)] text-[var(--punkdom-text)] hover:bg-[var(--punkdom-hover)]" onClick={openCreateDialog}>
-                <Plus className="h-3.5 w-3.5" />
-                {t('branchTimeline.createBranch')}
-              </Button>
-            )}
-          </div>
         </div>
       )}
 
@@ -392,121 +376,6 @@ export function BranchTimeline({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  )
-}
-
-function MiniMap({ layout, scrollRef, ariaLabel }: { layout: GraphLayout; scrollRef: RefObject<HTMLDivElement | null>; ariaLabel: string }) {
-  const [viewport, setViewport] = useState({ left: 0, top: 0, width: 100, height: 100 })
-  const draggingRef = useRef(false)
-
-  const updateViewport = useCallback(() => {
-    const scroller = scrollRef.current
-    if (!scroller || layout.width <= 0 || layout.height <= 0) return
-    setViewport({
-      left: (scroller.scrollLeft / layout.width) * 100,
-      top: (scroller.scrollTop / layout.height) * 100,
-      width: Math.min(100, (scroller.clientWidth / layout.width) * 100),
-      height: Math.min(100, (scroller.clientHeight / layout.height) * 100),
-    })
-  }, [layout.height, layout.width, scrollRef])
-
-  useEffect(() => {
-    const scroller = scrollRef.current
-    if (!scroller) return
-    updateViewport()
-    scroller.addEventListener('scroll', updateViewport, { passive: true })
-    const observer = new ResizeObserver(updateViewport)
-    observer.observe(scroller)
-    return () => {
-      scroller.removeEventListener('scroll', updateViewport)
-      observer.disconnect()
-    }
-  }, [scrollRef, updateViewport])
-
-  const moveTo = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const scroller = scrollRef.current
-    if (!scroller) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    const ratioX = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
-    const ratioY = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
-    scrollElementTo(
-      scroller,
-      Math.max(0, ratioX * layout.width - scroller.clientWidth / 2),
-      Math.max(0, ratioY * layout.height - scroller.clientHeight / 2),
-      draggingRef.current ? 'auto' : 'smooth',
-    )
-  }
-
-  return (
-    <div
-      className="group relative hidden h-10 min-w-[220px] max-w-[380px] flex-1 cursor-crosshair overflow-hidden rounded-[var(--punkdom-radius)] border border-[var(--punkdom-border)] bg-[var(--punkdom-surface-2)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_22px_rgba(0,0,0,0.20)] sm:block"
-      onPointerDown={(event) => {
-        draggingRef.current = true
-        event.currentTarget.setPointerCapture(event.pointerId)
-        moveTo(event)
-      }}
-      onPointerMove={(event) => {
-        if (draggingRef.current) moveTo(event)
-      }}
-      onPointerUp={(event) => {
-        draggingRef.current = false
-        event.currentTarget.releasePointerCapture(event.pointerId)
-      }}
-      onPointerCancel={() => {
-        draggingRef.current = false
-      }}
-      aria-label={ariaLabel}
-    >
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0)_42%),radial-gradient(circle_at_50%_0%,rgba(180,184,192,0.12),transparent_62%)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/10" />
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[var(--punkdom-surface-2)] to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[var(--punkdom-surface-2)] to-transparent" />
-      <svg className="absolute inset-0 h-full w-full px-2 py-1.5" viewBox={`0 0 ${layout.width} ${layout.height}`} preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <filter id="punkdom-minimap-soft-glow" x="-20%" y="-80%" width="140%" height="260%">
-            <feGaussianBlur stdDeviation="1.6" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        {layout.connections.map((connection) => (
-          <path
-            key={`mini-${connection.from.node.id}-${'node' in connection.to ? connection.to.node.id : connection.to.branch.id}`}
-            d={connectionPath(connection.from, connection.to, layout.metrics)}
-            fill="none"
-            stroke={connection.color}
-            strokeWidth={connection.branchChanged ? 5 : 4}
-            strokeDasharray={connection.dashed ? '10 12' : undefined}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity={connection.dashed ? 0.18 : 0.34}
-          />
-        ))}
-        {layout.positionedNodes.map((item) => (
-          <circle
-            key={`mini-node-${item.node.id}`}
-            cx={item.x + layout.metrics.nodeDotX}
-            cy={item.y + layout.metrics.nodeCenterY}
-            r={item.node.current || item.node.head ? 6 : 4.5}
-            fill={item.node.current ? 'var(--punkdom-text)' : item.color}
-            opacity={item.node.current ? 0.95 : 0.62}
-            filter={item.node.current ? 'url(#punkdom-minimap-soft-glow)' : undefined}
-          />
-        ))}
-      </svg>
-      <div
-        className="absolute rounded-[5px] border border-white/45 bg-white/10 shadow-[0_0_0_1px_rgba(0,0,0,0.35),0_0_18px_rgba(212,215,221,0.16),inset_0_1px_0_rgba(255,255,255,0.22)] transition-all duration-150 group-active:duration-0"
-        style={{
-          left: `${viewport.left}%`,
-          top: `${viewport.top}%`,
-          width: `${viewport.width}%`,
-          height: `${viewport.height}%`,
-        }}
-      />
-      <div className="pointer-events-none absolute inset-0 rounded-md ring-1 ring-black/30" />
     </div>
   )
 }
